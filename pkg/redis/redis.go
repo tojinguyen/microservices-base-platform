@@ -9,10 +9,10 @@ import (
 )
 
 type Config struct {
-	Host     string
-	Port     int
-	Password string
-	DB       int
+	Host     string `mapstructure:"host"`
+	Port     int    `mapstructure:"port"`
+	Password string `mapstructure:"password"`
+	DB       int    `mapstructure:"db"`
 }
 
 func New(cfg Config) (*redis.Client, error) {
