@@ -19,6 +19,8 @@ type AuthService interface {
 	Register(ctx context.Context, email, password, name string) (*dto.RegisterResponse, error)
 	Login(ctx context.Context, email, password string) (*dto.LoginResponse, error)
 	GetUserByID(ctx context.Context, id string) (*domain.User, error)
+	LoginWithGoogle(ctx context.Context, code string) (*dto.LoginResponse, error)
+	GetGoogleAuthURL(state string) string
 }
 
 type authService struct {

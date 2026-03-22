@@ -3,6 +3,7 @@ package handler
 import (
 	"backend/pkg/response"
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/tojinguyen/identity/internal/service"
@@ -51,4 +52,27 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	response.OK(w, login_data)
+}
+
+func (h *AuthHandler) GoogleLogin(w http.ResponseWriter, r *http.Request) {
+	url := h.svc.GetGoogleAuthURL("random_state_string")
+	http.Redirect(w, r, url, http.StatusTemporaryRedirect)
+}
+
+func (h *AuthHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
+	code := r.URL.Query().Get("code")
+	state := r.URL.Query().Get("state")
+
+	if state != "random_state_string" {
+		response.Error(w, r, errors.New("invalid oauth state"))
+		return
+	}
+
+	tokenData, err := h.svc.LoginWithGoogle(r.Context(), code)
+	if err != nil {
+		response.Error(w, r, err)
+		return
+	}
+
+	response.OK(w, tokenData)
 }
