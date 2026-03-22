@@ -9,9 +9,10 @@ import (
 )
 
 type Config struct {
-	SecretKey     string `mapstructure:"secret_key"`
-	Issuer        string `mapstructure:"issuer"`
-	TokenLifespan int    `mapstructure:"token_lifespan"`
+	SecretKey            string `mapstructure:"secret_key"`
+	Issuer               string `mapstructure:"issuer"`
+	AccessTokenLifespan  int    `mapstructure:"access_token_lifespan"`
+	RefreshTokenLifespan int    `mapstructure:"refresh_token_lifespan"`
 }
 
 type Authenticator struct {
@@ -30,17 +31,31 @@ type Claims struct {
 	jwt.RegisteredClaims
 }
 
-func (a *Authenticator) GenerateToken(userID, role string) (string, error) {
+func (a *Authenticator) GenerateAccessToken(userID, role string) (string, error) {
 	claims := &Claims{
 		UserID: userID,
 		Role:   role,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    a.config.Issuer,
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Duration(a.config.TokenLifespan) * time.Hour)),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Duration(a.config.AccessTokenLifespan) * time.Hour)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 		},
 	}
 
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString([]byte(a.config.SecretKey))
+}
+
+func (a *Authenticator) GenerateRefreshToken(userID, role string) (string, error) {
+	claims := &Claims{
+		UserID: userID,
+		Role:   role,
+		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    a.config.Issuer,
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Duration(a.config.RefreshTokenLifespan) * time.Hour)),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+		},
+	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString([]byte(a.config.SecretKey))
 }
@@ -78,4 +93,18 @@ func ExtractToken(authHeader string) string {
 		return parts[1]
 	}
 	return ""
+}
+
+func (a *Authenticator) generateToken(userID, role string, lifespan time.Duration) (string, error) {
+	claims := &Claims{
+		UserID: userID,
+		Role:   role,
+		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    a.config.Issuer,
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(lifespan)),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+		},
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString([]byte(a.config.SecretKey))
 }
