@@ -84,6 +84,17 @@ func (a *Authenticator) VerifyToken(tokenString string) (*Claims, error) {
 	return nil, errors.New("invalid token claims")
 }
 
+func (a *Authenticator) ValidateRefreshToken(tokenString string) (*Claims, error) {
+	claims, err := a.VerifyToken(tokenString)
+	if err != nil {
+		return nil, err
+	}
+	if time.Until(claims.ExpiresAt.Time) > time.Duration(a.config.AccessTokenLifespan)*time.Hour {
+		return nil, errors.New("refresh token is not close to expiration")
+	}
+	return claims, nil
+}
+
 func ExtractToken(authHeader string) string {
 	if authHeader == "" {
 		return ""

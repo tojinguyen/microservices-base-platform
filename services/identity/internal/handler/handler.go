@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/tojinguyen/identity/internal/dto"
 	"github.com/tojinguyen/identity/internal/service"
 )
 
@@ -52,6 +53,21 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	response.OK(w, login_data)
+}
+
+func (h *AuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
+	var refreshTokenReq dto.RefreshTokenRequest
+	if err := json.NewDecoder(r.Body).Decode(&refreshTokenReq); err != nil {
+		response.Error(w, r, err)
+		return
+	}
+
+	loginData, err := h.svc.RefreshToken(r.Context(), refreshTokenReq.RefreshToken)
+	if err != nil {
+		response.Error(w, r, err)
+		return
+	}
+	response.OK(w, loginData)
 }
 
 func (h *AuthHandler) GoogleLogin(w http.ResponseWriter, r *http.Request) {

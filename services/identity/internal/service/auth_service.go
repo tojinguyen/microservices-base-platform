@@ -19,6 +19,7 @@ type AuthService interface {
 	Register(ctx context.Context, email, password, name string) (*dto.RegisterResponse, error)
 	Login(ctx context.Context, email, password string) (*dto.LoginResponse, error)
 	GetUserByID(ctx context.Context, id string) (*domain.User, error)
+	RefreshToken(ctx context.Context, refreshToken string) (*dto.LoginResponse, error)
 	LoginWithGoogle(ctx context.Context, code string) (*dto.LoginResponse, error)
 	GetGoogleAuthURL(state string) string
 }
@@ -95,6 +96,38 @@ func (s *authService) Login(ctx context.Context, email, password string) (*dto.L
 
 func (s *authService) GetUserByID(ctx context.Context, id string) (*domain.User, error) {
 	return s.userRepo.GetByID(ctx, id)
+}
+
+func (s *authService) RefreshToken(ctx context.Context, refreshToken string) (*dto.LoginResponse, error) {
+	claims, err := s.authenticator.ValidateRefreshToken(refreshToken)
+	if err != nil {
+		return nil, err
+	}
+	user, err := s.userRepo.GetByID(ctx, claims.UserID)
+	if err != nil {
+		return nil, err
+	}
+
+	accessToken, err := s.authenticator.GenerateAccessToken(user.Id, user.Role)
+	if err != nil {
+		return nil, err
+	}
+
+	refreshToken, err = s.authenticator.GenerateRefreshToken(user.Id, user.Role)
+	if err != nil {
+		return nil, err
+	}
+
+	return &dto.LoginResponse{
+		AccessToken:  accessToken,
+		RefreshToken: refreshToken,
+		User: dto.UserResponse{
+			Id:    user.Id,
+			Email: user.Email,
+			Name:  user.Name,
+			Role:  user.Role,
+		},
+	}, nil
 }
 
 func (s *authService) LoginWithGoogle(ctx context.Context, code string) (*dto.LoginResponse, error) {

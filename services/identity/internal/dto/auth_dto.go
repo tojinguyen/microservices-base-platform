@@ -11,6 +11,10 @@ type RegisterRequest struct {
 	Name     string `json:"name" validate:"required"`
 }
 
+type RefreshTokenRequest struct {
+	RefreshToken string `json:"refresh_token" validate:"required"`
+}
+
 type GoogleUser struct {
 	Id            string `json:"id"`
 	Email         string `json:"email"`
