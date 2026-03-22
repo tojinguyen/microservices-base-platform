@@ -5,6 +5,7 @@ import "golang.org/x/crypto/bcrypt"
 type User struct {
 	BaseModel
 	Email        string `gorm:"uniqueIndex;not null;size:255" json:"email"`
+	Role         string `gorm:"size:50;default:'user'" json:"role"`
 	PasswordHash string `gorm:"not null" json:"-"`
 	Name         string `gorm:"size:255" json:"name"`
 }
