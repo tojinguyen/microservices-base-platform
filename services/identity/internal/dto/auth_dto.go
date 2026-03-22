@@ -11,6 +11,14 @@ type RegisterRequest struct {
 	Name     string `json:"name" validate:"required"`
 }
 
+type GoogleUser struct {
+	Id            string `json:"id"`
+	Email         string `json:"email"`
+	VerifiedEmail bool   `json:"verified_email"`
+	Name          string `json:"name"`
+	Picture       string `json:"picture"`
+}
+
 type RegisterResponse struct {
 	UserId string `json:"user_id"`
 }
