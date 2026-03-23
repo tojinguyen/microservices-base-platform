@@ -2,7 +2,6 @@ package route
 
 import (
 	"backend/pkg/auth"
-	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/tojinguyen/identity/internal/handler"
@@ -19,29 +18,13 @@ func RegisterRoutes(r *gin.Engine, authHandler *handler.AuthHandler, authenticat
 		v1.GET("/google/callback", authHandler.GoogleCallback)
 
 		protected := v1.Group("/")
-		protected.Use(GinAuthAdapter(authenticator))
+		protected.Use(authenticator.GinRequireAuth())
 		{
 			// Temp
 			protected.GET("/me", func(c *gin.Context) {
 				claims, _ := auth.CurrentUser(c.Request.Context())
 				c.JSON(200, gin.H{"user_id": claims.UserID})
 			})
-		}
-	}
-}
-
-func GinAuthAdapter(a *auth.Authenticator) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		nextCalled := false
-		next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			nextCalled = true
-			c.Request = r
-		})
-
-		a.RequireAuth()(next).ServeHTTP(c.Writer, c.Request)
-
-		if !nextCalled {
-			c.Abort()
 		}
 	}
 }
