@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 )
 
 type Config struct {
@@ -31,9 +32,9 @@ type Claims struct {
 	jwt.RegisteredClaims
 }
 
-func (a *Authenticator) GenerateAccessToken(userID, role string) (string, error) {
+func (a *Authenticator) GenerateAccessToken(userID uuid.UUID, role string) (string, error) {
 	claims := &Claims{
-		UserID: userID,
+		UserID: userID.String(),
 		Role:   role,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    a.config.Issuer,
@@ -46,9 +47,9 @@ func (a *Authenticator) GenerateAccessToken(userID, role string) (string, error)
 	return token.SignedString([]byte(a.config.SecretKey))
 }
 
-func (a *Authenticator) GenerateRefreshToken(userID, role string) (string, error) {
+func (a *Authenticator) GenerateRefreshToken(userID uuid.UUID, role string) (string, error) {
 	claims := &Claims{
-		UserID: userID,
+		UserID: userID.String(),
 		Role:   role,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    a.config.Issuer,
@@ -106,9 +107,9 @@ func ExtractToken(authHeader string) string {
 	return ""
 }
 
-func (a *Authenticator) generateToken(userID, role string, lifespan time.Duration) (string, error) {
+func (a *Authenticator) generateToken(userID uuid.UUID, role string, lifespan time.Duration) (string, error) {
 	claims := &Claims{
-		UserID: userID,
+		UserID: userID.String(),
 		Role:   role,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    a.config.Issuer,

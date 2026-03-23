@@ -1,5 +1,7 @@
 package dto
 
+import "github.com/google/uuid"
+
 type LoginRequest struct {
 	Email    string `json:"email" validate:"required,email"`
 	Password string `json:"password" validate:"required"`
@@ -24,7 +26,7 @@ type GoogleUser struct {
 }
 
 type RegisterResponse struct {
-	UserId string `json:"user_id"`
+	UserId uuid.UUID `json:"user_id"`
 }
 
 type LoginResponse struct {
@@ -34,8 +36,8 @@ type LoginResponse struct {
 }
 
 type UserResponse struct {
-	Id    string `json:"id"`
-	Email string `json:"email"`
-	Name  string `json:"name"`
-	Role  string `json:"role"`
+	Id    uuid.UUID `json:"id"`
+	Email string    `json:"email"`
+	Name  string    `json:"name"`
+	Role  string    `json:"role"`
 }

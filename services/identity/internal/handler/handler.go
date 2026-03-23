@@ -2,10 +2,10 @@ package handler
 
 import (
 	"backend/pkg/response"
-	"encoding/json"
 	"errors"
 	"net/http"
 
+	"github.com/gin-gonic/gin"
 	"github.com/tojinguyen/identity/internal/dto"
 	"github.com/tojinguyen/identity/internal/service"
 )
@@ -18,77 +18,70 @@ func NewAuthHandler(svc service.AuthService) *AuthHandler {
 	return &AuthHandler{svc: svc}
 }
 
-func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
-	var input struct {
-		Email    string `json:"email"`
-		Password string `json:"password"`
-		Name     string `json:"name"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		response.Error(w, r, err)
+func (h *AuthHandler) Register(c *gin.Context) {
+	var input dto.RegisterRequest
+	if err := c.ShouldBindJSON(&input); err != nil {
+		response.Error(c.Writer, c.Request, err)
 		return
 	}
 
-	registerResponse, err := h.svc.Register(r.Context(), input.Email, input.Password, input.Name)
+	registerResponse, err := h.svc.Register(c.Request.Context(), input.Email, input.Password, input.Name)
 	if err != nil {
-		response.Error(w, r, err)
+		response.Error(c.Writer, c.Request, err)
 		return
 	}
-	response.Created(w, registerResponse)
+	response.Created(c.Writer, registerResponse)
 }
 
-func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
-	var input struct {
-		Email    string `json:"email"`
-		Password string `json:"password"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		response.Error(w, r, err)
+func (h *AuthHandler) Login(c *gin.Context) {
+	var input dto.LoginRequest
+	if err := c.ShouldBindJSON(&input); err != nil {
+		response.Error(c.Writer, c.Request, err)
 		return
 	}
 
-	login_data, err := h.svc.Login(r.Context(), input.Email, input.Password)
+	login_data, err := h.svc.Login(c.Request.Context(), input.Email, input.Password)
 	if err != nil {
-		response.Error(w, r, err)
+		response.Error(c.Writer, c.Request, err)
 		return
 	}
-	response.OK(w, login_data)
+	response.OK(c.Writer, login_data)
 }
 
-func (h *AuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
+func (h *AuthHandler) RefreshToken(c *gin.Context) {
 	var refreshTokenReq dto.RefreshTokenRequest
-	if err := json.NewDecoder(r.Body).Decode(&refreshTokenReq); err != nil {
-		response.Error(w, r, err)
+	if err := c.ShouldBindJSON(&refreshTokenReq); err != nil {
+		response.Error(c.Writer, c.Request, err)
 		return
 	}
 
-	loginData, err := h.svc.RefreshToken(r.Context(), refreshTokenReq.RefreshToken)
+	loginData, err := h.svc.RefreshToken(c.Request.Context(), refreshTokenReq.RefreshToken)
 	if err != nil {
-		response.Error(w, r, err)
+		response.Error(c.Writer, c.Request, err)
 		return
 	}
-	response.OK(w, loginData)
+	response.OK(c.Writer, loginData)
 }
 
-func (h *AuthHandler) GoogleLogin(w http.ResponseWriter, r *http.Request) {
+func (h *AuthHandler) GoogleLogin(c *gin.Context) {
 	url := h.svc.GetGoogleAuthURL("random_state_string")
-	http.Redirect(w, r, url, http.StatusTemporaryRedirect)
+	c.Redirect(http.StatusTemporaryRedirect, url)
 }
 
-func (h *AuthHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
-	code := r.URL.Query().Get("code")
-	state := r.URL.Query().Get("state")
+func (h *AuthHandler) GoogleCallback(c *gin.Context) {
+	code := c.Query("code")
+	state := c.Query("state")
 
 	if state != "random_state_string" {
-		response.Error(w, r, errors.New("invalid oauth state"))
+		response.Error(c.Writer, c.Request, errors.New("invalid oauth state"))
 		return
 	}
 
-	tokenData, err := h.svc.LoginWithGoogle(r.Context(), code)
+	tokenData, err := h.svc.LoginWithGoogle(c.Request.Context(), code)
 	if err != nil {
-		response.Error(w, r, err)
+		response.Error(c.Writer, c.Request, err)
 		return
 	}
 
-	response.OK(w, tokenData)
+	response.OK(c.Writer, tokenData)
 }
