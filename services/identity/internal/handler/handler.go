@@ -85,3 +85,17 @@ func (h *AuthHandler) GoogleCallback(c *gin.Context) {
 
 	response.OK(c.Writer, tokenData)
 }
+
+func (h *AuthHandler) GetProfile(c *gin.Context) {
+	var input dto.GetProfileRequest
+	if err := c.ShouldBindJSON(&input); err != nil {
+		response.Error(c.Writer, c.Request, err)
+		return
+	}
+	profileData, err := h.svc.GetProfile(c.Request.Context(), input.UserID)
+	if err != nil {
+		response.Error(c.Writer, c.Request, err)
+		return
+	}
+	response.OK(c.Writer, profileData)
+}

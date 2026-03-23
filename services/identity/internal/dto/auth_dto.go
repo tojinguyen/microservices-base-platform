@@ -17,7 +17,11 @@ type RefreshTokenRequest struct {
 	RefreshToken string `json:"refresh_token" validate:"required"`
 }
 
-type GoogleUser struct {
+type GetProfileRequest struct {
+	UserID string `json:"user_id" validate:"required"`
+}
+
+type GoogleUserResponse struct {
 	Id            string `json:"id"`
 	Email         string `json:"email"`
 	VerifiedEmail bool   `json:"verified_email"`

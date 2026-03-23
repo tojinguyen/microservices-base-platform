@@ -16,15 +16,11 @@ func RegisterRoutes(r *gin.Engine, authHandler *handler.AuthHandler, authenticat
 
 		v1.GET("/google/login", authHandler.GoogleLogin)
 		v1.GET("/google/callback", authHandler.GoogleCallback)
+	}
 
-		protected := v1.Group("/")
-		protected.Use(authenticator.GinRequireAuth())
-		{
-			// Temp
-			protected.GET("/me", func(c *gin.Context) {
-				claims, _ := auth.CurrentUser(c.Request.Context())
-				c.JSON(200, gin.H{"user_id": claims.UserID})
-			})
-		}
+	profile := r.Group("/api/v1/profile")
+	profile.Use(authenticator.GinRequireAuth())
+	{
+		profile.GET("/", authHandler.GetProfile)
 	}
 }

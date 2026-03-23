@@ -22,6 +22,7 @@ type AuthService interface {
 	RefreshToken(ctx context.Context, refreshToken string) (*dto.LoginResponse, error)
 	LoginWithGoogle(ctx context.Context, code string) (*dto.LoginResponse, error)
 	GetGoogleAuthURL(state string) string
+	GetProfile(ctx context.Context, userID string) (*dto.UserResponse, error)
 }
 
 type authService struct {
@@ -178,16 +179,29 @@ func (s *authService) GetGoogleAuthURL(state string) string {
 	return s.oauthConfig.AuthCodeURL(state)
 }
 
-func (s *authService) fetchGoogleProfile(accessToken string) (*dto.GoogleUser, error) {
+func (s *authService) fetchGoogleProfile(accessToken string) (*dto.GoogleUserResponse, error) {
 	resp, err := http.Get("https://www.googleapis.com/oauth2/v2/userinfo?access_token=" + accessToken)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 
-	var gUser dto.GoogleUser
+	var gUser dto.GoogleUserResponse
 	if err := json.NewDecoder(resp.Body).Decode(&gUser); err != nil {
 		return nil, err
 	}
 	return &gUser, nil
+}
+
+func (s *authService) GetProfile(ctx context.Context, userID string) (*dto.UserResponse, error) {
+	user, err := s.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	return &dto.UserResponse{
+		Id:    user.Id,
+		Email: user.Email,
+		Name:  user.Name,
+		Role:  user.Role,
+	}, nil
 }
