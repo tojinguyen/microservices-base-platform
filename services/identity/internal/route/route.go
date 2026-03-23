@@ -2,6 +2,7 @@ package route
 
 import (
 	"backend/pkg/auth"
+	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/tojinguyen/identity/internal/handler"
@@ -18,7 +19,7 @@ func RegisterRoutes(r *gin.Engine, authHandler *handler.AuthHandler, authenticat
 		v1.GET("/google/callback", authHandler.GoogleCallback)
 
 		protected := v1.Group("/")
-		protected.Use(GinAuthMiddleware(authenticator))
+		protected.Use(GinAuthAdapter(authenticator))
 		{
 			// Temp
 			protected.GET("/me", func(c *gin.Context) {
@@ -29,24 +30,18 @@ func RegisterRoutes(r *gin.Engine, authHandler *handler.AuthHandler, authenticat
 	}
 }
 
-func GinAuthMiddleware(a *auth.Authenticator) gin.HandlerFunc {
+func GinAuthAdapter(a *auth.Authenticator) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		authHeader := c.GetHeader("Authorization")
-		tokenString := auth.ExtractToken(authHeader)
+		nextCalled := false
+		next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			nextCalled = true
+			c.Request = r
+		})
 
-		if tokenString == "" {
-			c.AbortWithStatusJSON(401, gin.H{"error": "Unauthorized"})
-			return
+		a.RequireAuth()(next).ServeHTTP(c.Writer, c.Request)
+
+		if !nextCalled {
+			c.Abort()
 		}
-
-		claims, err := a.VerifyToken(tokenString)
-		if err != nil {
-			c.AbortWithStatusJSON(401, gin.H{"error": "Invalid token"})
-			return
-		}
-
-		ctx := auth.WithUser(c.Request.Context(), claims)
-		c.Request = c.Request.WithContext(ctx)
-		c.Next()
 	}
 }
