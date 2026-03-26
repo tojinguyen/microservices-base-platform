@@ -20,6 +20,7 @@ services:
 
   # 2. Identity Service
   identity-service:
+    image: identity-service
     build:
       context: .                         
       dockerfile: services/identity/Dockerfile
