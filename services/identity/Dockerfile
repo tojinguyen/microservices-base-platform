@@ -7,10 +7,10 @@ WORKDIR /app
 
 COPY go.work go.work.sum ./
 COPY pkg/ ./pkg/
-COPY services/identity/go.mod services/identity/go.sum ./
+COPY services/identity/go.mod services/identity/go.sum ./services/identity/
 
-COPY services/identity/internal/ ./internal/
-COPY services/identity/cmd/ ./cmd/
+COPY services/identity/internal/ ./services/identity/internal/
+COPY services/identity/cmd/ ./services/identity/cmd/
 
 RUN go mod download
 
