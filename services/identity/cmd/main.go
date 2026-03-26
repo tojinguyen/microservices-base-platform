@@ -15,6 +15,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	identity_config "github.com/tojinguyen/identity/internal/config"
+	"github.com/tojinguyen/identity/internal/domain"
 	"github.com/tojinguyen/identity/internal/handler"
 	"github.com/tojinguyen/identity/internal/repository"
 	"github.com/tojinguyen/identity/internal/route"
@@ -31,8 +32,14 @@ func main() {
 		log.Panic("Failed to load identity configuration")
 	}
 
-	database, _ := db.New(cfg.Database)
-	database.AutoMigrate()
+	database, err := db.New(cfg.Database)
+	if err != nil {
+		log.Panic("Failed to connect to database", zap.Error(err))
+	}
+
+	if err := db.AutoMigrate(database, domain.GetModels()...); err != nil {
+		log.Panic("Failed to run database migrations", zap.Error(err))
+	}
 
 	authenticator := auth.New(cfg.JWT)
 	userRepo := repository.NewUserRepository(database)
