@@ -22,6 +22,7 @@ RUN apk --no-cache add ca-certificates tzdata
 WORKDIR /root
 
 COPY --from=builder /app/identity-service ./
+RUN chmod +x ./identity-service
 
 EXPOSE 8080
 CMD ["./identity-service"]
