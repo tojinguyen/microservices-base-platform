@@ -6,12 +6,6 @@ import (
 	"github.com/google/uuid"
 )
 
-func GetModels() []interface{} {
-	return []interface{}{
-		&User{},
-	}
-}
-
 type BaseModel struct {
 	Id        uuid.UUID  `gorm:"primaryKey" json:"id"`
 	CreatedAt time.Time  `gorm:"autoCreateTime" json:"created_at"`

@@ -9,6 +9,7 @@ COPY go.work go.work.sum ./
 COPY pkg/ ./pkg/
 COPY services/identity/go.mod services/identity/go.sum ./services/identity/
 
+COPY services/identity/migrations/ ./services/identity/migrations/
 COPY services/identity/internal/ ./services/identity/internal/
 COPY services/identity/cmd/ ./services/identity/cmd/
 

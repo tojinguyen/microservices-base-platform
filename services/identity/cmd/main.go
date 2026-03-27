@@ -15,11 +15,11 @@ import (
 
 	"github.com/gin-gonic/gin"
 	identity_config "github.com/tojinguyen/identity/internal/config"
-	"github.com/tojinguyen/identity/internal/domain"
 	"github.com/tojinguyen/identity/internal/handler"
 	"github.com/tojinguyen/identity/internal/repository"
 	"github.com/tojinguyen/identity/internal/route"
 	"github.com/tojinguyen/identity/internal/service"
+	"github.com/tojinguyen/identity/migrations"
 	"go.uber.org/zap"
 )
 
@@ -37,7 +37,12 @@ func main() {
 		log.Panic("Failed to connect to database", zap.Error(err))
 	}
 
-	if err := db.AutoMigrate(database, domain.GetModels()...); err != nil {
+	sqlDB, err := database.DB()
+	if err != nil {
+		log.Panic("Failed to get sql.DB from gorm", zap.Error(err))
+	}
+
+	if err := db.RunMigrations(sqlDB, migrations.FS, "."); err != nil {
 		log.Panic("Failed to run database migrations", zap.Error(err))
 	}
 
