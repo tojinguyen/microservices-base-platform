@@ -15,6 +15,10 @@ COPY services/identity/cmd/ ./services/identity/cmd/
 
 RUN go mod download
 
+# Install swag and generate docs before building
+RUN go install github.com/swaggo/swag/cmd/swag@latest
+RUN cd services/identity && swag init -g cmd/main.go --parseDependency --parseInternal
+
 RUN CGO_ENABLED=0 GOOS=linux go build -o identity-service ./services/identity/cmd/main.go
 
 # Stage 2: Final image

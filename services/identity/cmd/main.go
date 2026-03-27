@@ -23,6 +23,14 @@ import (
 	"go.uber.org/zap"
 )
 
+// @title           Identity Service API
+// @version         1.0
+// @description     This is the API documentation for the Identity Service.
+// @host            localhost:8080
+// @BasePath        /api/v1
+// @securityDefinitions.apikey ApiKeyAuth
+// @in header
+// @name Authorization
 func main() {
 	logger.Init("identity-service")
 	log := logger.L()

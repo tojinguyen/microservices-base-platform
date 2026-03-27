@@ -18,6 +18,17 @@ func NewAuthHandler(svc service.AuthService) *AuthHandler {
 	return &AuthHandler{svc: svc}
 }
 
+// Register godoc
+// @Summary Register a new user
+// @Description Register a new user with email and password
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param request body dto.RegisterRequest true "Register Request"
+// @Success 201 {object} object
+// @Failure 400 {object} object
+// @Failure 500 {object} object
+// @Router /auth/register [post]
 func (h *AuthHandler) Register(c *gin.Context) {
 	var input dto.RegisterRequest
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -33,6 +44,17 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	response.Created(c.Writer, registerResponse)
 }
 
+// Login godoc
+// @Summary Login user
+// @Description Login user with email and password
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param request body dto.LoginRequest true "Login Request"
+// @Success 200 {object} object
+// @Failure 400 {object} object
+// @Failure 500 {object} object
+// @Router /auth/login [post]
 func (h *AuthHandler) Login(c *gin.Context) {
 	var input dto.LoginRequest
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -48,6 +70,17 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	response.OK(c.Writer, login_data)
 }
 
+// RefreshToken godoc
+// @Summary Refresh token
+// @Description Refresh JWT access token
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param request body dto.RefreshTokenRequest true "Refresh Token Request"
+// @Success 200 {object} object
+// @Failure 400 {object} object
+// @Failure 500 {object} object
+// @Router /auth/refresh [post]
 func (h *AuthHandler) RefreshToken(c *gin.Context) {
 	var refreshTokenReq dto.RefreshTokenRequest
 	if err := c.ShouldBindJSON(&refreshTokenReq); err != nil {
@@ -86,6 +119,18 @@ func (h *AuthHandler) GoogleCallback(c *gin.Context) {
 	response.OK(c.Writer, tokenData)
 }
 
+// GetProfile godoc
+// @Summary Get user profile
+// @Description Get current logged in user profile
+// @Tags profile
+// @Accept json
+// @Produce json
+// @Param request body dto.GetProfileRequest true "Get Profile Request"
+// @Success 200 {object} object
+// @Failure 400 {object} object
+// @Failure 401 {object} object
+// @Router /profile/ [get]
+// @Security ApiKeyAuth
 func (h *AuthHandler) GetProfile(c *gin.Context) {
 	var input dto.GetProfileRequest
 	if err := c.ShouldBindJSON(&input); err != nil {
