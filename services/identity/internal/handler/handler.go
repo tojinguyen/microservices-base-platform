@@ -96,11 +96,27 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 	response.OK(c.Writer, loginData)
 }
 
+// GoogleLogin godoc
+// @Summary Redirect to Google Login
+// @Description Redirect user to Google for OAuth2 authentication
+// @Tags auth
+// @Success 307
+// @Router /auth/google/login [get]
 func (h *AuthHandler) GoogleLogin(c *gin.Context) {
 	url := h.svc.GetGoogleAuthURL("random_state_string")
 	c.Redirect(http.StatusTemporaryRedirect, url)
 }
 
+// GoogleCallback godoc
+// @Summary Google Login Callback
+// @Description Callback URL for Google OAuth2
+// @Tags auth
+// @Param code query string true "OAuth code"
+// @Param state query string true "OAuth state"
+// @Success 200 {object} object
+// @Failure 400 {object} object
+// @Failure 500 {object} object
+// @Router /auth/google/callback [get]
 func (h *AuthHandler) GoogleCallback(c *gin.Context) {
 	code := c.Query("code")
 	state := c.Query("state")

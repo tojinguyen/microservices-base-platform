@@ -9,14 +9,14 @@ COPY go.work go.work.sum ./
 COPY pkg/ ./pkg/
 COPY services/identity/go.mod services/identity/go.sum ./services/identity/
 
+RUN go mod download
+
+RUN go install github.com/swaggo/swag/cmd/swag@latest
+
 COPY services/identity/migrations/ ./services/identity/migrations/
 COPY services/identity/internal/ ./services/identity/internal/
 COPY services/identity/cmd/ ./services/identity/cmd/
 
-RUN go mod download
-
-# Install swag and generate docs before building
-RUN go install github.com/swaggo/swag/cmd/swag@latest
 RUN cd services/identity && swag init -g cmd/main.go --parseDependency --parseInternal
 
 RUN CGO_ENABLED=0 GOOS=linux go build -o identity-service ./services/identity/cmd/main.go
