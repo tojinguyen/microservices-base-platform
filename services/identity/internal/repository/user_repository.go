@@ -7,6 +7,8 @@ import (
 	"gorm.io/gorm"
 )
 
+//go:generate mockery --name=UserRepository
+
 type UserRepository interface {
 	Create(ctx context.Context, user *domain.User) error
 	GetByEmail(ctx context.Context, email string) (*domain.User, error)

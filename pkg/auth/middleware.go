@@ -5,6 +5,8 @@ import (
 
 	"backend/pkg/errors"
 	"backend/pkg/response"
+
+	"github.com/gin-gonic/gin"
 )
 
 func (a *Authenticator) RequireAuth() func(http.Handler) http.Handler {
@@ -29,5 +31,29 @@ func (a *Authenticator) RequireAuth() func(http.Handler) http.Handler {
 
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
+	}
+}
+
+func (a *Authenticator) GinRequireAuth() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		authHeader := c.GetHeader("Authorization")
+		tokenString := ExtractToken(authHeader)
+
+		if tokenString == "" {
+			response.Error(c.Writer, c.Request, errors.Unauthorized("Missing Authorization header"))
+			c.Abort()
+			return
+		}
+
+		claims, err := a.VerifyToken(tokenString)
+		if err != nil {
+			response.Error(c.Writer, c.Request, errors.Unauthorized("Invalid or expired token"))
+			c.Abort()
+			return
+		}
+
+		ctx := WithUser(c.Request.Context(), claims)
+		c.Request = c.Request.WithContext(ctx)
+		c.Next()
 	}
 }

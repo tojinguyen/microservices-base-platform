@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  postgres-db:
+    image: postgres:15-alpine
+    container_name: identity-postgres
+    environment:
+      POSTGRES_USER: user_admin
+      POSTGRES_PASSWORD: password123
+      POSTGRES_DB: identity_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user_admin -d identity_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # 2. Identity Service
+  identity-service:
+    image: identity-service
+    build:
+      context: .                         
+      dockerfile: services/identity/Dockerfile
+    container_name: identity-service
+    ports:
+      - "8081:8080" 
+    depends_on:
+      postgres-db:
+        condition: service_healthy
+    env_file:
+      - services/identity/.env
+    environment:
+      # Overriding localhost from .env to use the internal docker network host
+      - DATABASE_HOST=postgres-db
+
+volumes:
+  postgres_data:

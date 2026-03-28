@@ -1,6 +1,7 @@
 package config
 
 import (
+	"reflect"
 	"strings"
 
 	"github.com/spf13/viper"
@@ -44,5 +45,39 @@ func Load(cfg interface{}, opts ...Options) error {
 
 	_ = v.ReadInConfig()
 
+	bindEnvs(v, cfg)
+
 	return v.Unmarshal(cfg)
+}
+
+func bindEnvs(v *viper.Viper, iface interface{}, parts ...string) {
+	ifv := reflect.ValueOf(iface)
+	if ifv.Kind() == reflect.Ptr {
+		ifv = ifv.Elem()
+	}
+
+	if ifv.Kind() != reflect.Struct {
+		return
+	}
+
+	ift := ifv.Type()
+	for i := 0; i < ift.NumField(); i++ {
+		vField := ifv.Field(i)
+		tField := ift.Field(i)
+
+		tv, ok := tField.Tag.Lookup("mapstructure")
+		if !ok {
+			tv = strings.ToLower(tField.Name)
+		}
+
+		if tv == "-" {
+			continue
+		}
+
+		if vField.Kind() == reflect.Struct {
+			bindEnvs(v, vField.Interface(), append(parts, tv)...)
+		} else {
+			v.BindEnv(strings.Join(append(parts, tv), "."))
+		}
+	}
 }
