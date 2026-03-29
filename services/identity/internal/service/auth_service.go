@@ -2,6 +2,7 @@ package service
 
 import (
 	"backend/pkg/auth"
+	"backend/pkg/redis"
 	"context"
 	"encoding/json"
 	"errors"
@@ -29,9 +30,10 @@ type authService struct {
 	userRepo      repository.UserRepository
 	authenticator *auth.Authenticator
 	oauthConfig   *oauth2.Config
+	cache         *redis.Cache
 }
 
-func NewAuthService(userRepo repository.UserRepository, authenticator *auth.Authenticator, googleClientID, googleSecret, redirectURL string) AuthService {
+func NewAuthService(userRepo repository.UserRepository, authenticator *auth.Authenticator, cache *redis.Cache, googleClientID, googleSecret, redirectURL string) AuthService {
 	conf := &oauth2.Config{
 		ClientID:     googleClientID,
 		ClientSecret: googleSecret,
@@ -47,6 +49,7 @@ func NewAuthService(userRepo repository.UserRepository, authenticator *auth.Auth
 		userRepo:      userRepo,
 		authenticator: authenticator,
 		oauthConfig:   conf,
+		cache:         cache,
 	}
 }
 
@@ -78,7 +81,7 @@ func (s *authService) Login(ctx context.Context, email, password string) (*dto.L
 		return nil, err
 	}
 
-	refreshToken, err := s.authenticator.GenerateRefreshToken(user.Id, user.Role)
+	refreshToken, _, err := s.authenticator.GenerateRefreshToken(user.Id, user.Role)
 	if err != nil {
 		return nil, err
 	}
@@ -114,7 +117,7 @@ func (s *authService) RefreshToken(ctx context.Context, refreshToken string) (*d
 		return nil, err
 	}
 
-	refreshToken, err = s.authenticator.GenerateRefreshToken(user.Id, user.Role)
+	refreshToken, _, err = s.authenticator.GenerateRefreshToken(user.Id, user.Role)
 	if err != nil {
 		return nil, err
 	}
@@ -159,7 +162,7 @@ func (s *authService) LoginWithGoogle(ctx context.Context, code string) (*dto.Lo
 		return nil, err
 	}
 
-	refresh_token, err := s.authenticator.GenerateRefreshToken(user.Id, user.Role)
+	refresh_token, _, err := s.authenticator.GenerateRefreshToken(user.Id, user.Role)
 	if err != nil {
 		return nil, err
 	}

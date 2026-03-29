@@ -29,6 +29,7 @@ func New(cfg Config) *Authenticator {
 type Claims struct {
 	UserID string `json:"user_id"`
 	Role   string `json:"role"`
+	JTI    string `json:"jti,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -47,10 +48,12 @@ func (a *Authenticator) GenerateAccessToken(userID uuid.UUID, role string) (stri
 	return token.SignedString([]byte(a.config.SecretKey))
 }
 
-func (a *Authenticator) GenerateRefreshToken(userID uuid.UUID, role string) (string, error) {
+func (a *Authenticator) GenerateRefreshToken(userID uuid.UUID, role string) (string, string, error) {
+	jti := uuid.New().String()
 	claims := &Claims{
 		UserID: userID.String(),
 		Role:   role,
+		JTI:    jti,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    a.config.Issuer,
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Duration(a.config.RefreshTokenLifespan) * time.Hour)),
@@ -58,7 +61,8 @@ func (a *Authenticator) GenerateRefreshToken(userID uuid.UUID, role string) (str
 		},
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString([]byte(a.config.SecretKey))
+	tokenString, err := token.SignedString([]byte(a.config.SecretKey))
+	return tokenString, jti, err
 }
 
 func (a *Authenticator) VerifyToken(tokenString string) (*Claims, error) {

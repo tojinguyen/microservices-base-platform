@@ -18,6 +18,17 @@ services:
       timeout: 5s
       retries: 5
 
+  redis-cache:
+    image: redis:7-alpine
+    container_name: identity-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
   # 2. Identity Service
   identity-service:
     image: identity-service
@@ -30,11 +41,14 @@ services:
     depends_on:
       postgres-db:
         condition: service_healthy
+      redis-cache:
+        condition: service_healthy
     env_file:
       - services/identity/.env
     environment:
       # Overriding localhost from .env to use the internal docker network host
       - DATABASE_HOST=postgres-db
+      - REDIS_HOST=redis-cache
 
 volumes:
   postgres_data:
