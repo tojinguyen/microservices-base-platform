@@ -1,0 +1,43 @@
+---
+# 1. Create Service to expose port outside (browser can access)
+apiVersion: v1
+kind: Service
+metadata:
+  name: identity-service
+spec:
+  type: LoadBalancer 
+  selector:
+    app: identity
+  ports:
+    - protocol: TCP
+      port: 8081       
+      targetPort: 8080 
+
+---
+# 2. Create Deployment for Identity App
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: identity-deployment
+spec:
+  replicas: 1 # Run 1 instance of the app
+  selector:
+    matchLabels:
+      app: identity
+  template:
+    metadata:
+      labels:
+        app: identity
+    spec:
+      containers:
+        - name: identity
+          image: identity-service:v1.0.0
+          imagePullPolicy: IfNotPresent # Important: Tell K8s to use local image, not pull from registry
+          ports:
+            - containerPort: 8080
+          # Push ALL environment variables from ConfigMap and Secret into Container
+          envFrom:
+            - configMapRef:
+                name: identity-config
+            - secretRef:
+                name: identity-secret
