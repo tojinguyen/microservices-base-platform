@@ -2,16 +2,19 @@ package service
 
 import (
 	"backend/pkg/auth"
+	"backend/pkg/logger"
 	"backend/pkg/redis"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/tojinguyen/identity/internal/domain"
 	"github.com/tojinguyen/identity/internal/dto"
 	"github.com/tojinguyen/identity/internal/repository"
+	"go.uber.org/zap"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 )
@@ -81,8 +84,14 @@ func (s *authService) Login(ctx context.Context, email, password string) (*dto.L
 		return nil, err
 	}
 
-	refreshToken, _, err := s.authenticator.GenerateRefreshToken(user.Id, user.Role)
+	refreshToken, jti, err := s.authenticator.GenerateRefreshToken(user.Id, user.Role)
 	if err != nil {
+		return nil, err
+	}
+
+	rtKey := s.buildRTKey(user.Id.String(), jti)
+	expiration := s.getRTExpiration()
+	if err := s.cache.Set(ctx, rtKey, "active", expiration); err != nil {
 		return nil, err
 	}
 
@@ -103,22 +112,46 @@ func (s *authService) GetUserByID(ctx context.Context, id string) (*domain.User,
 }
 
 func (s *authService) RefreshToken(ctx context.Context, refreshToken string) (*dto.LoginResponse, error) {
+	log := logger.FromContext(ctx)
+
 	claims, err := s.authenticator.ValidateRefreshToken(refreshToken)
 	if err != nil {
 		return nil, err
 	}
+
+	rtKey := s.buildRTKey(claims.UserID, claims.JTI)
+	var status string
+	err = s.cache.Get(ctx, rtKey, &status)
+
+	if err != nil {
+		log.Warn("Failed to get refresh token status from cache")
+		return nil, errors.New("refresh token expired or reused")
+	}
+
+	_ = s.cache.Delete(ctx, rtKey)
+
 	user, err := s.userRepo.GetByID(ctx, claims.UserID)
 	if err != nil {
+		log.Error("Failed to get user by ID", zap.String("user_id", claims.UserID), zap.Error(err))
 		return nil, err
 	}
 
 	accessToken, err := s.authenticator.GenerateAccessToken(user.Id, user.Role)
 	if err != nil {
+		log.Error("Failed to generate new access token", zap.Error(err))
 		return nil, err
 	}
 
-	refreshToken, _, err = s.authenticator.GenerateRefreshToken(user.Id, user.Role)
+	refreshToken, newJti, err := s.authenticator.GenerateRefreshToken(user.Id, user.Role)
 	if err != nil {
+		log.Error("Failed to generate new refresh token", zap.Error(err))
+		return nil, err
+	}
+
+	newRtKey := s.buildRTKey(user.Id.String(), newJti)
+	expiration := s.getRTExpiration()
+	if err := s.cache.Set(ctx, newRtKey, "active", expiration); err != nil {
+		log.Error("Failed to store new refresh token in cache", zap.String("user_id", user.Id.String()), zap.Error(err))
 		return nil, err
 	}
 
@@ -207,4 +240,16 @@ func (s *authService) GetProfile(ctx context.Context, userID string) (*dto.UserR
 		Name:  user.Name,
 		Role:  user.Role,
 	}, nil
+}
+
+func (s *authService) buildRTKey(userID string, jti string) string {
+	return fmt.Sprintf("rt:%s:%s", userID, jti)
+}
+
+// func (s *authService) buildUserRTPath(userID string) string {
+// 	return fmt.Sprintf("rt:%s:*", userID)
+// }
+
+func (s *authService) getRTExpiration() time.Duration {
+	return time.Duration(s.authenticator.GetConfig().RefreshTokenLifespan) * time.Hour
 }

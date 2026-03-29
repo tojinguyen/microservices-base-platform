@@ -33,6 +33,10 @@ type Claims struct {
 	jwt.RegisteredClaims
 }
 
+func (a *Authenticator) GetConfig() Config {
+	return a.config
+}
+
 func (a *Authenticator) GenerateAccessToken(userID uuid.UUID, role string) (string, error) {
 	claims := &Claims{
 		UserID: userID.String(),
