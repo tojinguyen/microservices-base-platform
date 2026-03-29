@@ -27,6 +27,7 @@ type AuthService interface {
 	LoginWithGoogle(ctx context.Context, code string) (*dto.LoginResponse, error)
 	GetGoogleAuthURL(state string) string
 	GetProfile(ctx context.Context, userID string) (*dto.UserResponse, error)
+	Logout(ctx context.Context, accessToken, refreshToken string) error
 }
 
 type authService struct {
@@ -114,7 +115,7 @@ func (s *authService) GetUserByID(ctx context.Context, id string) (*domain.User,
 func (s *authService) RefreshToken(ctx context.Context, refreshToken string) (*dto.LoginResponse, error) {
 	log := logger.FromContext(ctx)
 
-	claims, err := s.authenticator.ValidateRefreshToken(refreshToken)
+	claims, err := s.authenticator.VerifyToken(refreshToken)
 	if err != nil {
 		return nil, err
 	}
@@ -242,13 +243,33 @@ func (s *authService) GetProfile(ctx context.Context, userID string) (*dto.UserR
 	}, nil
 }
 
+func (s *authService) Logout(ctx context.Context, accessToken, refreshToken string) error {
+	atClaims, _ := s.authenticator.VerifyToken(accessToken)
+	rtClaims, err := s.authenticator.VerifyToken(refreshToken)
+
+	if err != nil {
+		return err
+	}
+
+	rtKey := s.buildRTKey(rtClaims.UserID, rtClaims.JTI)
+	_ = s.cache.Delete(ctx, rtKey)
+
+	remainingTime := time.Until(atClaims.ExpiresAt.Time)
+	if remainingTime > 0 {
+		blacklistKey := s.buildBlacklistKey(accessToken)
+		_ = s.cache.Set(ctx, blacklistKey, "revoked", remainingTime)
+	}
+
+	return s.cache.Delete(ctx, rtKey)
+}
+
 func (s *authService) buildRTKey(userID string, jti string) string {
 	return fmt.Sprintf("rt:%s:%s", userID, jti)
 }
 
-// func (s *authService) buildUserRTPath(userID string) string {
-// 	return fmt.Sprintf("rt:%s:*", userID)
-// }
+func (s *authService) buildBlacklistKey(accessToken string) string {
+	return fmt.Sprintf("blacklist:%s", accessToken)
+}
 
 func (s *authService) getRTExpiration() time.Duration {
 	return time.Duration(s.authenticator.GetConfig().RefreshTokenLifespan) * time.Hour

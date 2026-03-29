@@ -160,3 +160,29 @@ func (h *AuthHandler) GetProfile(c *gin.Context) {
 	}
 	response.OK(c.Writer, profileData)
 }
+
+// Logout godoc
+// @Summary Logout user
+// @Description Logout user and invalidate refresh token
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param request body dto.LogoutRequest true "Logout Request"
+// @Success 200 {object} object
+// @Failure 400 {object} object
+// @Failure 500 {object} object
+// @Router /auth/logout [post]
+func (h *AuthHandler) Logout(c *gin.Context) {
+	var input dto.LogoutRequest
+	if err := c.ShouldBindJSON(&input); err != nil {
+		response.Error(c.Writer, c.Request, err)
+		return
+	}
+
+	if err := h.svc.Logout(c.Request.Context(), input.AccessToken, input.RefreshToken); err != nil {
+		response.Error(c.Writer, c.Request, err)
+		return
+	}
+
+	response.OK(c.Writer, map[string]string{"message": "successfully logged out"})
+}

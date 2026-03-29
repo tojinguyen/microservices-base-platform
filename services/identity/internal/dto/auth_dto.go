@@ -21,6 +21,11 @@ type GetProfileRequest struct {
 	UserID string `json:"user_id" validate:"required"`
 }
 
+type LogoutRequest struct {
+	AccessToken  string `json:"access_token" validate:"required"`
+	RefreshToken string `json:"refresh_token" validate:"required"`
+}
+
 type GoogleUserResponse struct {
 	Id            string `json:"id"`
 	Email         string `json:"email"`
