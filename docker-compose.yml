@@ -37,7 +37,7 @@ services:
       dockerfile: services/identity/Dockerfile
     container_name: identity-service
     ports:
-      - "8081:8080" 
+      - "8080:8080" 
     depends_on:
       postgres-db:
         condition: service_healthy
