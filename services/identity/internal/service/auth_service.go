@@ -2,11 +2,11 @@ package service
 
 import (
 	"backend/pkg/auth"
+	"backend/pkg/errors"
 	"backend/pkg/logger"
 	"backend/pkg/redis"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -77,7 +77,7 @@ func (s *authService) Login(ctx context.Context, email, password string) (*dto.L
 		return nil, err
 	}
 	if !user.CheckPassword(password) {
-		return nil, errors.New("invalid credentials")
+		return nil, errors.Unauthorized("invalid credentials")
 	}
 
 	accessToken, err := s.authenticator.GenerateAccessToken(user.Id, user.Role)
@@ -126,7 +126,7 @@ func (s *authService) RefreshToken(ctx context.Context, refreshToken string) (*d
 
 	if err != nil {
 		log.Warn("Failed to get refresh token status from cache")
-		return nil, errors.New("refresh token expired or reused")
+		return nil, errors.Unauthorized("refresh token expired or reused")
 	}
 
 	_ = s.cache.Delete(ctx, rtKey)
