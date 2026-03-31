@@ -1,8 +1,14 @@
-.PHONY: build-identity up down logs clean migrate-add
+.PHONY: build build-identity build-notification up down logs clean migrate-add
+
+build: build-identity build-notification
 
 build-identity:
 	@echo "Building identity service docker image..."
 	docker build -t identity-service -f services/identity/Dockerfile .
+
+build-notification:
+	@echo "Building notification service docker image..."
+	docker build -t notification-service -f services/notification/Dockerfile .
 
 # Migration Helper
 # Usage: make migrate-add SERVICE=identity NAME=create_users_table

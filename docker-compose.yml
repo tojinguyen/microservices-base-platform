@@ -38,6 +38,25 @@ services:
       redis-cache:
         condition: service_healthy
 
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: platform-rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: platform-mailhog
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+
   # 2. Identity Service
   identity-service:
     image: identity-service
@@ -58,6 +77,41 @@ services:
       # Overriding localhost from .env to use the internal docker network host
       - DATABASE_HOST=postgres-db
       - REDIS_HOST=redis-cache
+
+  notification-service:
+    image: notification-service
+    build:
+      context: .
+      dockerfile: services/notification/Dockerfile
+    container_name: notification-service
+    ports:
+      - "8082:8082"
+    depends_on:
+      postgres-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      mailhog:
+        condition: service_started
+    environment:
+      - PORT=8082
+      - TIME_GRACE=10
+      - DATABASE_HOST=postgres-db
+      - DATABASE_PORT=5432
+      - DATABASE_USER=user_admin
+      - DATABASE_PASSWORD=password123
+      - DATABASE_DBNAME=identity_db
+      - DATABASE_SSLMODE=disable
+      - BROKER_HOST=rabbitmq
+      - BROKER_PORT=5672
+      - BROKER_USER=guest
+      - BROKER_PASSWORD=guest
+      - QUEUE_NOTIFICATION_EVENTS=notification.events
+      - SMTP_HOST=mailhog
+      - SMTP_PORT=1025
+      - SMTP_USERNAME=
+      - SMTP_PASSWORD=
+      - SMTP_FROM=no-reply@microservices.local
 
 volumes:
   postgres_data:
