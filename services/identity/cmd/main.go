@@ -5,6 +5,7 @@ import (
 	"backend/pkg/config"
 	"backend/pkg/db"
 	"backend/pkg/logger"
+	"backend/pkg/redis"
 	"context"
 	"fmt"
 	"net/http"
@@ -54,9 +55,15 @@ func main() {
 		log.Panic("Failed to run database migrations", zap.Error(err))
 	}
 
+	redisClient, err := redis.New(cfg.Redis)
+	if err != nil {
+		log.Panic("Failed to connect to redis", zap.Error(err))
+	}
+	cache := redis.NewCache(redisClient)
+
 	authenticator := auth.New(cfg.JWT)
 	userRepo := repository.NewUserRepository(database)
-	authService := service.NewAuthService(userRepo, authenticator, cfg.GoogleOAuth.ClientID, cfg.GoogleOAuth.ClientSecret, cfg.GoogleOAuth.RedirectURL)
+	authService := service.NewAuthService(userRepo, authenticator, cache, cfg.GoogleOAuth.ClientID, cfg.GoogleOAuth.ClientSecret, cfg.GoogleOAuth.RedirectURL)
 	authHandler := handler.NewAuthHandler(authService)
 
 	gin.SetMode(gin.ReleaseMode)

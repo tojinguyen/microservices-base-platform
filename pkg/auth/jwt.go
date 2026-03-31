@@ -29,7 +29,12 @@ func New(cfg Config) *Authenticator {
 type Claims struct {
 	UserID string `json:"user_id"`
 	Role   string `json:"role"`
+	JTI    string `json:"jti,omitempty"`
 	jwt.RegisteredClaims
+}
+
+func (a *Authenticator) GetConfig() Config {
+	return a.config
 }
 
 func (a *Authenticator) GenerateAccessToken(userID uuid.UUID, role string) (string, error) {
@@ -47,10 +52,12 @@ func (a *Authenticator) GenerateAccessToken(userID uuid.UUID, role string) (stri
 	return token.SignedString([]byte(a.config.SecretKey))
 }
 
-func (a *Authenticator) GenerateRefreshToken(userID uuid.UUID, role string) (string, error) {
+func (a *Authenticator) GenerateRefreshToken(userID uuid.UUID, role string) (string, string, error) {
+	jti := uuid.New().String()
 	claims := &Claims{
 		UserID: userID.String(),
 		Role:   role,
+		JTI:    jti,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    a.config.Issuer,
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Duration(a.config.RefreshTokenLifespan) * time.Hour)),
@@ -58,7 +65,8 @@ func (a *Authenticator) GenerateRefreshToken(userID uuid.UUID, role string) (str
 		},
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString([]byte(a.config.SecretKey))
+	tokenString, err := token.SignedString([]byte(a.config.SecretKey))
+	return tokenString, jti, err
 }
 
 func (a *Authenticator) VerifyToken(tokenString string) (*Claims, error) {
@@ -83,17 +91,6 @@ func (a *Authenticator) VerifyToken(tokenString string) (*Claims, error) {
 	}
 
 	return nil, errors.New("invalid token claims")
-}
-
-func (a *Authenticator) ValidateRefreshToken(tokenString string) (*Claims, error) {
-	claims, err := a.VerifyToken(tokenString)
-	if err != nil {
-		return nil, err
-	}
-	if time.Until(claims.ExpiresAt.Time) > time.Duration(a.config.AccessTokenLifespan)*time.Hour {
-		return nil, errors.New("refresh token is not close to expiration")
-	}
-	return claims, nil
 }
 
 func ExtractToken(authHeader string) string {

@@ -95,7 +95,7 @@ func TestAuthService_RefreshToken(t *testing.T) {
 	userID := uuid.New()
 
 	t.Run("Refresh_Success", func(t *testing.T) {
-		refreshToken, _ := authenticator.GenerateRefreshToken(userID, "user")
+		refreshToken, _, _ := authenticator.GenerateRefreshToken(userID, "user")
 
 		user := &domain.User{
 			BaseModel: domain.BaseModel{Id: userID},

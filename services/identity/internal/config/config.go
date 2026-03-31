@@ -3,6 +3,7 @@ package config
 import (
 	"backend/pkg/auth"
 	"backend/pkg/db"
+	"backend/pkg/redis"
 )
 
 type Config struct {
@@ -11,6 +12,7 @@ type Config struct {
 	Database    db.Config         `mapstructure:"database"`
 	JWT         auth.Config       `mapstructure:"jwt"`
 	GoogleOAuth GoogleOAuthConfig `mapstructure:"google_oauth"`
+	Redis       redis.Config      `mapstructure:"redis"`
 }
 
 type GoogleOAuthConfig struct {

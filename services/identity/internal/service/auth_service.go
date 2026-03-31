@@ -2,15 +2,19 @@ package service
 
 import (
 	"backend/pkg/auth"
+	"backend/pkg/errors"
+	"backend/pkg/logger"
+	"backend/pkg/redis"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/tojinguyen/identity/internal/domain"
 	"github.com/tojinguyen/identity/internal/dto"
 	"github.com/tojinguyen/identity/internal/repository"
+	"go.uber.org/zap"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 )
@@ -23,15 +27,17 @@ type AuthService interface {
 	LoginWithGoogle(ctx context.Context, code string) (*dto.LoginResponse, error)
 	GetGoogleAuthURL(state string) string
 	GetProfile(ctx context.Context, userID string) (*dto.UserResponse, error)
+	Logout(ctx context.Context, accessToken, refreshToken string) error
 }
 
 type authService struct {
 	userRepo      repository.UserRepository
 	authenticator *auth.Authenticator
 	oauthConfig   *oauth2.Config
+	cache         *redis.Cache
 }
 
-func NewAuthService(userRepo repository.UserRepository, authenticator *auth.Authenticator, googleClientID, googleSecret, redirectURL string) AuthService {
+func NewAuthService(userRepo repository.UserRepository, authenticator *auth.Authenticator, cache *redis.Cache, googleClientID, googleSecret, redirectURL string) AuthService {
 	conf := &oauth2.Config{
 		ClientID:     googleClientID,
 		ClientSecret: googleSecret,
@@ -47,6 +53,7 @@ func NewAuthService(userRepo repository.UserRepository, authenticator *auth.Auth
 		userRepo:      userRepo,
 		authenticator: authenticator,
 		oauthConfig:   conf,
+		cache:         cache,
 	}
 }
 
@@ -70,7 +77,7 @@ func (s *authService) Login(ctx context.Context, email, password string) (*dto.L
 		return nil, err
 	}
 	if !user.CheckPassword(password) {
-		return nil, errors.New("invalid credentials")
+		return nil, errors.Unauthorized("invalid credentials")
 	}
 
 	accessToken, err := s.authenticator.GenerateAccessToken(user.Id, user.Role)
@@ -78,8 +85,14 @@ func (s *authService) Login(ctx context.Context, email, password string) (*dto.L
 		return nil, err
 	}
 
-	refreshToken, err := s.authenticator.GenerateRefreshToken(user.Id, user.Role)
+	refreshToken, jti, err := s.authenticator.GenerateRefreshToken(user.Id, user.Role)
 	if err != nil {
+		return nil, err
+	}
+
+	rtKey := s.buildRTKey(user.Id.String(), jti)
+	expiration := s.getRTExpiration()
+	if err := s.cache.Set(ctx, rtKey, "active", expiration); err != nil {
 		return nil, err
 	}
 
@@ -100,22 +113,46 @@ func (s *authService) GetUserByID(ctx context.Context, id string) (*domain.User,
 }
 
 func (s *authService) RefreshToken(ctx context.Context, refreshToken string) (*dto.LoginResponse, error) {
-	claims, err := s.authenticator.ValidateRefreshToken(refreshToken)
+	log := logger.FromContext(ctx)
+
+	claims, err := s.authenticator.VerifyToken(refreshToken)
 	if err != nil {
 		return nil, err
 	}
+
+	rtKey := s.buildRTKey(claims.UserID, claims.JTI)
+	var status string
+	err = s.cache.Get(ctx, rtKey, &status)
+
+	if err != nil {
+		log.Warn("Failed to get refresh token status from cache")
+		return nil, errors.Unauthorized("refresh token expired or reused")
+	}
+
+	_ = s.cache.Delete(ctx, rtKey)
+
 	user, err := s.userRepo.GetByID(ctx, claims.UserID)
 	if err != nil {
+		log.Error("Failed to get user by ID", zap.String("user_id", claims.UserID), zap.Error(err))
 		return nil, err
 	}
 
 	accessToken, err := s.authenticator.GenerateAccessToken(user.Id, user.Role)
 	if err != nil {
+		log.Error("Failed to generate new access token", zap.Error(err))
 		return nil, err
 	}
 
-	refreshToken, err = s.authenticator.GenerateRefreshToken(user.Id, user.Role)
+	refreshToken, newJti, err := s.authenticator.GenerateRefreshToken(user.Id, user.Role)
 	if err != nil {
+		log.Error("Failed to generate new refresh token", zap.Error(err))
+		return nil, err
+	}
+
+	newRtKey := s.buildRTKey(user.Id.String(), newJti)
+	expiration := s.getRTExpiration()
+	if err := s.cache.Set(ctx, newRtKey, "active", expiration); err != nil {
+		log.Error("Failed to store new refresh token in cache", zap.String("user_id", user.Id.String()), zap.Error(err))
 		return nil, err
 	}
 
@@ -159,7 +196,7 @@ func (s *authService) LoginWithGoogle(ctx context.Context, code string) (*dto.Lo
 		return nil, err
 	}
 
-	refresh_token, err := s.authenticator.GenerateRefreshToken(user.Id, user.Role)
+	refresh_token, _, err := s.authenticator.GenerateRefreshToken(user.Id, user.Role)
 	if err != nil {
 		return nil, err
 	}
@@ -204,4 +241,36 @@ func (s *authService) GetProfile(ctx context.Context, userID string) (*dto.UserR
 		Name:  user.Name,
 		Role:  user.Role,
 	}, nil
+}
+
+func (s *authService) Logout(ctx context.Context, accessToken, refreshToken string) error {
+	atClaims, _ := s.authenticator.VerifyToken(accessToken)
+	rtClaims, err := s.authenticator.VerifyToken(refreshToken)
+
+	if err != nil {
+		return err
+	}
+
+	rtKey := s.buildRTKey(rtClaims.UserID, rtClaims.JTI)
+	_ = s.cache.Delete(ctx, rtKey)
+
+	remainingTime := time.Until(atClaims.ExpiresAt.Time)
+	if remainingTime > 0 {
+		blacklistKey := s.buildBlacklistKey(accessToken)
+		_ = s.cache.Set(ctx, blacklistKey, "revoked", remainingTime)
+	}
+
+	return s.cache.Delete(ctx, rtKey)
+}
+
+func (s *authService) buildRTKey(userID string, jti string) string {
+	return fmt.Sprintf("rt:%s:%s", userID, jti)
+}
+
+func (s *authService) buildBlacklistKey(accessToken string) string {
+	return fmt.Sprintf("blacklist:%s", accessToken)
+}
+
+func (s *authService) getRTExpiration() time.Duration {
+	return time.Duration(s.authenticator.GetConfig().RefreshTokenLifespan) * time.Hour
 }

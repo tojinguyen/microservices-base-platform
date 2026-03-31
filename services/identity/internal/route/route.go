@@ -29,5 +29,6 @@ func RegisterRoutes(r *gin.Engine, authHandler *handler.AuthHandler, authenticat
 	profile.Use(authenticator.GinRequireAuth())
 	{
 		profile.GET("/", authHandler.GetProfile)
+		v1.POST("/logout", authHandler.Logout)
 	}
 }
