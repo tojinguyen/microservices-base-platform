@@ -8,6 +8,8 @@ services:
       POSTGRES_USER: user_admin
       POSTGRES_PASSWORD: password123
       POSTGRES_DB: identity_db
+      # Create both databases on init
+      POSTGRES_MULTIPLE_DATABASES: "identity_db,notification_db"
     ports:
       - "5432:5432"
     volumes:
@@ -100,7 +102,7 @@ services:
       - DATABASE_PORT=5432
       - DATABASE_USER=user_admin
       - DATABASE_PASSWORD=password123
-      - DATABASE_DBNAME=identity_db
+      - DATABASE_DBNAME=notification_db
       - DATABASE_SSLMODE=disable
       - BROKER_HOST=rabbitmq
       - BROKER_PORT=5672
