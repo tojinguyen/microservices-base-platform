@@ -23,6 +23,7 @@ import (
 	"github.com/tojinguyen/notification/internal/worker"
 	"github.com/tojinguyen/notification/migrations"
 	"go.uber.org/zap"
+	"gorm.io/gorm"
 )
 
 // @title Notification Service API
@@ -51,16 +52,31 @@ func main() {
 		log.Panic("failed to get sql.DB from gorm", zap.Error(err))
 	}
 
+	// Always run migrations
 	if err := db.RunMigrations(sqlDB, migrations.FS, "."); err != nil {
 		log.Panic("failed to run database migrations", zap.Error(err))
 	}
 
-	brokerClient, err := broker.NewRabbitMQ(cfg.Broker)
-	if err != nil {
-		log.Panic("failed to connect to broker", zap.Error(err))
-	}
-	defer brokerClient.Close()
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
+	log.Info("Starting notification service", zap.String("mode", cfg.AppMode))
+
+	switch cfg.AppMode {
+	case notificationConfig.ModeWorkerPending:
+		runPendingWorker(ctx, cfg, database)
+	case notificationConfig.ModeWorkerEmail:
+		runEmailWorker(ctx, cfg, database)
+	case notificationConfig.ModeAPI:
+		runAPI(ctx, cfg, database)
+	default:
+		log.Warn("Unknown app mode, falling back to API mode", zap.String("mode", cfg.AppMode))
+		runAPI(ctx, cfg, database)
+	}
+}
+
+func runAPI(ctx context.Context, cfg *notificationConfig.Config, database *gorm.DB) {
+	log := logger.L()
 	notificationRepo := repository.NewNotificationRepository(database)
 	templateRepo := repository.NewTemplateRepository(database)
 	notificationService := service.NewNotificationService(notificationRepo, templateRepo)
@@ -70,9 +86,6 @@ func main() {
 	}
 
 	notificationHandler := handler.NewNotificationHandler(notificationService)
-
-	notificationWorker := worker.NewNotificationWorker(notificationRepo, brokerClient, cfg)
-	go notificationWorker.Start(context.Background())
 
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
@@ -92,13 +105,42 @@ func main() {
 		}
 	}()
 
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit
+	<-ctx.Done()
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(cfg.TimeGrace)*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), time.Duration(cfg.TimeGrace)*time.Second)
 	defer cancel()
-	if err := srv.Shutdown(ctx); err != nil {
+	if err := srv.Shutdown(shutdownCtx); err != nil {
 		log.Fatal("server forced to shutdown", zap.Error(err))
 	}
+	log.Info("API server gracefully stopped")
+}
+
+func runPendingWorker(ctx context.Context, cfg *notificationConfig.Config, database *gorm.DB) {
+	log := logger.L()
+	brokerClient, err := broker.NewRabbitMQ(cfg.Broker)
+	if err != nil {
+		log.Panic("failed to connect to broker", zap.Error(err))
+	}
+	defer brokerClient.Close()
+
+	notificationRepo := repository.NewNotificationRepository(database)
+	pendingWorker := worker.NewNotificationWorker(notificationRepo, brokerClient, cfg)
+
+	log.Info("Pending worker starting")
+	pendingWorker.Start(ctx)
+}
+
+func runEmailWorker(ctx context.Context, cfg *notificationConfig.Config, database *gorm.DB) {
+	log := logger.L()
+	brokerClient, err := broker.NewRabbitMQ(cfg.Broker)
+	if err != nil {
+		log.Panic("failed to connect to broker", zap.Error(err))
+	}
+	defer brokerClient.Close()
+
+	notificationRepo := repository.NewNotificationRepository(database)
+	emailWorker := worker.NewEmailWorker(notificationRepo, brokerClient, cfg)
+
+	log.Info("Email worker starting")
+	emailWorker.Start(ctx)
 }

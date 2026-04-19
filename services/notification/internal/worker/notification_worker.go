@@ -78,8 +78,7 @@ func (w *notificationWorker) processPendingNotifications(ctx context.Context) {
 			continue
 		}
 
-		now := time.Now().UTC()
-		err = w.repo.UpdateDeliveryStatus(ctx, noti.Id, domain.NotificationStatusSent, "", &now)
+		err = w.repo.UpdateDeliveryStatus(ctx, noti.Id, domain.NotificationStatusProcessing, "", nil)
 		if err != nil {
 			log.Error("failed to update notification status", zap.String("id", noti.Id.String()), zap.Error(err))
 		}

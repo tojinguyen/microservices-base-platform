@@ -56,7 +56,7 @@ func (r *rabbitMQ) Publish(ctx context.Context, exchange, routingKey string, bod
 	return nil
 }
 
-func (r *rabbitMQ) QueueSubscribe(ctx context.Context, queueName string, handler Handler) error {
+func (r *rabbitMQ) QueueSubscribe(ctx context.Context, queueName, exchange, routingKey string, handler Handler) error {
 	ch, err := r.conn.Channel()
 	if err != nil {
 		return err
@@ -72,6 +72,32 @@ func (r *rabbitMQ) QueueSubscribe(ctx context.Context, queueName string, handler
 	)
 	if err != nil {
 		return err
+	}
+
+	if exchange != "" {
+		err = ch.ExchangeDeclare(
+			exchange,
+			"direct", // Assume direct for notification channel routing
+			true,     // durable
+			false,    // auto-deleted
+			false,    // internal
+			false,    // no-wait
+			nil,      // arguments
+		)
+		if err != nil {
+			return fmt.Errorf("failed to declare exchange: %w", err)
+		}
+
+		err = ch.QueueBind(
+			q.Name,
+			routingKey,
+			exchange,
+			false,
+			nil,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to bind queue to exchange: %w", err)
+		}
 	}
 
 	err = ch.Qos(1, 0, false)

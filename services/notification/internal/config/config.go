@@ -5,7 +5,14 @@ import (
 	"backend/pkg/db"
 )
 
+const (
+	ModeAPI           = "api"
+	ModeWorkerPending = "worker-pending"
+	ModeWorkerEmail   = "worker-email"
+)
+
 type Config struct {
+	AppMode    string        `mapstructure:"app_mode"`
 	TimeGrace  int           `mapstructure:"time_grace"`
 	ServerPort int           `mapstructure:"port"`
 	Database   db.Config     `mapstructure:"database"`

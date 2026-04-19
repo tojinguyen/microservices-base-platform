@@ -24,7 +24,8 @@ const (
 type NotificationStatus string
 
 const (
-	NotificationStatusPending NotificationStatus = "pending"
-	NotificationStatusSent    NotificationStatus = "sent"
-	NotificationStatusFailed  NotificationStatus = "failed"
+	NotificationStatusPending    NotificationStatus = "pending"
+	NotificationStatusProcessing NotificationStatus = "processing"
+	NotificationStatusSent       NotificationStatus = "sent"
+	NotificationStatusFailed     NotificationStatus = "failed"
 )
