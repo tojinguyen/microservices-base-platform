@@ -13,6 +13,7 @@ type NotificationRepository interface {
 	Create(ctx context.Context, notification *domain.Notification) error
 	ExistsByEventID(ctx context.Context, eventID string) (bool, error)
 	UpdateDeliveryStatus(ctx context.Context, notificationID uuid.UUID, status domain.NotificationStatus, errorMessage string, sentAt *time.Time) error
+	GetPending(ctx context.Context, limit int) ([]*domain.Notification, error)
 }
 
 type notificationRepository struct {
@@ -60,4 +61,14 @@ func (r *notificationRepository) UpdateDeliveryStatus(ctx context.Context, notif
 		Model(&domain.Notification{}).
 		Where("id = ?", notificationID).
 		Updates(updates).Error
+}
+
+func (r *notificationRepository) GetPending(ctx context.Context, limit int) ([]*domain.Notification, error) {
+	var notifications []*domain.Notification
+	err := r.db.WithContext(ctx).
+		Where("status = ?", domain.NotificationStatusPending).
+		Order("created_at asc").
+		Limit(limit).
+		Find(&notifications).Error
+	return notifications, err
 }

@@ -12,6 +12,7 @@ type Config struct {
 	Broker     broker.Config `mapstructure:"broker"`
 	SMTP       SMTPConfig    `mapstructure:"smtp"`
 	Queue      QueueConfig   `mapstructure:"queue"`
+	Worker     WorkerConfig  `mapstructure:"worker"`
 }
 
 type SMTPConfig struct {
@@ -23,5 +24,10 @@ type SMTPConfig struct {
 }
 
 type QueueConfig struct {
-	NotificationEvents string `mapstructure:"notification_events"`
+	Exchange string `mapstructure:"exchange"`
+}
+
+type WorkerConfig struct {
+	BatchSize int `mapstructure:"batch_size"`
+	Interval  int `mapstructure:"interval"`
 }

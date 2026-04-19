@@ -20,6 +20,7 @@ import (
 	"github.com/tojinguyen/notification/internal/repository"
 	"github.com/tojinguyen/notification/internal/route"
 	"github.com/tojinguyen/notification/internal/service"
+	"github.com/tojinguyen/notification/internal/worker"
 	"github.com/tojinguyen/notification/migrations"
 	"go.uber.org/zap"
 )
@@ -69,6 +70,9 @@ func main() {
 	}
 
 	notificationHandler := handler.NewNotificationHandler(notificationService)
+
+	notificationWorker := worker.NewNotificationWorker(notificationRepo, brokerClient, cfg)
+	go notificationWorker.Start(context.Background())
 
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
