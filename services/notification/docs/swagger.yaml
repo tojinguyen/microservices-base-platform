@@ -1,0 +1,83 @@
+basePath: /api/v1/notifications
+definitions:
+  github_com_tojinguyen_notification_internal_dto.NotificationEvent:
+    properties:
+      event_id:
+        type: string
+      event_type:
+        type: string
+      occurred_at:
+        type: string
+      payload:
+        $ref: '#/definitions/github_com_tojinguyen_notification_internal_dto.NotificationPayload'
+    type: object
+  github_com_tojinguyen_notification_internal_dto.NotificationPayload:
+    properties:
+      content:
+        type: string
+      email:
+        type: string
+      subject:
+        type: string
+      user_id:
+        type: string
+    type: object
+  response.StandardResponse:
+    properties:
+      data: {}
+      error: {}
+      meta: {}
+      success:
+        type: boolean
+    type: object
+info:
+  contact: {}
+  description: This is a notification service API
+  title: Notification Service API
+  version: "1.0"
+paths:
+  /health:
+    get:
+      description: check service health
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.StandardResponse'
+      summary: Health check
+      tags:
+      - health
+  /send:
+    post:
+      consumes:
+      - application/json
+      description: Direct trigger to send a notification (test or synchonous bypass
+        of queue)
+      parameters:
+      - description: Notification Event
+        in: body
+        name: event
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_tojinguyen_notification_internal_dto.NotificationEvent'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.StandardResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.StandardResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.StandardResponse'
+      summary: Send notification
+      tags:
+      - notifications
+swagger: "2.0"

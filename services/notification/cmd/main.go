@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	_ "github.com/tojinguyen/notification/docs"
 	notificationConfig "github.com/tojinguyen/notification/internal/config"
 	"github.com/tojinguyen/notification/internal/consumer"
 	"github.com/tojinguyen/notification/internal/handler"
@@ -23,6 +24,11 @@ import (
 	"github.com/tojinguyen/notification/migrations"
 	"go.uber.org/zap"
 )
+
+// @title Notification Service API
+// @version 1.0
+// @description This is a notification service API
+// @BasePath /api/v1/notifications
 
 func main() {
 	if err := logger.Init("notification-service"); err != nil {
@@ -60,7 +66,7 @@ func main() {
 	notificationService := service.NewNotificationService(notificationRepo, emailSender)
 	notificationConsumer := consumer.NewNotificationConsumer(brokerClient, notificationService, cfg.Queue.NotificationEvents)
 
-	notificationHandler := handler.NewNotificationHandler()
+	notificationHandler := handler.NewNotificationHandler(notificationService)
 
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()

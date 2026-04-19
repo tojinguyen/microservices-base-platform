@@ -17,6 +17,16 @@ definitions:
     - email
     - password
     type: object
+  github_com_tojinguyen_identity_internal_dto.LogoutRequest:
+    properties:
+      access_token:
+        type: string
+      refresh_token:
+        type: string
+    required:
+    - access_token
+    - refresh_token
+    type: object
   github_com_tojinguyen_identity_internal_dto.RefreshTokenRequest:
     properties:
       refresh_token:
@@ -38,6 +48,14 @@ definitions:
     - name
     - password
     type: object
+  response.StandardResponse:
+    properties:
+      data: {}
+      error: {}
+      meta: {}
+      success:
+        type: boolean
+    type: object
 host: localhost:8080
 info:
   contact: {}
@@ -45,6 +63,45 @@ info:
   title: Identity Service API
   version: "1.0"
 paths:
+  /auth/google/callback:
+    get:
+      description: Callback URL for Google OAuth2
+      parameters:
+      - description: OAuth code
+        in: query
+        name: code
+        required: true
+        type: string
+      - description: OAuth state
+        in: query
+        name: state
+        required: true
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.StandardResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.StandardResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.StandardResponse'
+      summary: Google Login Callback
+      tags:
+      - auth
+  /auth/google/login:
+    get:
+      description: Redirect user to Google for OAuth2 authentication
+      responses:
+        "307":
+          description: Temporary Redirect
+      summary: Redirect to Google Login
+      tags:
+      - auth
   /auth/login:
     post:
       consumes:
@@ -63,16 +120,46 @@ paths:
         "200":
           description: OK
           schema:
-            type: object
+            $ref: '#/definitions/response.StandardResponse'
         "400":
           description: Bad Request
           schema:
-            type: object
+            $ref: '#/definitions/response.StandardResponse'
         "500":
           description: Internal Server Error
           schema:
-            type: object
+            $ref: '#/definitions/response.StandardResponse'
       summary: Login user
+      tags:
+      - auth
+  /auth/logout:
+    post:
+      consumes:
+      - application/json
+      description: Logout user and invalidate refresh token
+      parameters:
+      - description: Logout Request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_tojinguyen_identity_internal_dto.LogoutRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.StandardResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.StandardResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.StandardResponse'
+      summary: Logout user
       tags:
       - auth
   /auth/refresh:
@@ -93,15 +180,15 @@ paths:
         "200":
           description: OK
           schema:
-            type: object
+            $ref: '#/definitions/response.StandardResponse'
         "400":
           description: Bad Request
           schema:
-            type: object
+            $ref: '#/definitions/response.StandardResponse'
         "500":
           description: Internal Server Error
           schema:
-            type: object
+            $ref: '#/definitions/response.StandardResponse'
       summary: Refresh token
       tags:
       - auth
@@ -123,15 +210,15 @@ paths:
         "201":
           description: Created
           schema:
-            type: object
+            $ref: '#/definitions/response.StandardResponse'
         "400":
           description: Bad Request
           schema:
-            type: object
+            $ref: '#/definitions/response.StandardResponse'
         "500":
           description: Internal Server Error
           schema:
-            type: object
+            $ref: '#/definitions/response.StandardResponse'
       summary: Register a new user
       tags:
       - auth
@@ -153,15 +240,15 @@ paths:
         "200":
           description: OK
           schema:
-            type: object
+            $ref: '#/definitions/response.StandardResponse'
         "400":
           description: Bad Request
           schema:
-            type: object
+            $ref: '#/definitions/response.StandardResponse'
         "401":
           description: Unauthorized
           schema:
-            type: object
+            $ref: '#/definitions/response.StandardResponse'
       security:
       - ApiKeyAuth: []
       summary: Get user profile
