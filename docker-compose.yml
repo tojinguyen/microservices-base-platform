@@ -25,6 +25,8 @@ services:
       POSTGRES_USER: user_admin
       POSTGRES_PASSWORD: password123
       POSTGRES_DB: notification_db
+    ports:
+      - "5433:5432"
     volumes:
       - postgres_notification_data:/var/lib/postgresql/data
     healthcheck:

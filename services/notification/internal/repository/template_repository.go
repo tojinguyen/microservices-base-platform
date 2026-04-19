@@ -9,6 +9,7 @@ import (
 
 type TemplateRepository interface {
 	GetByEventType(ctx context.Context, eventType domain.EventType) (*domain.NotificationTemplate, error)
+	Create(ctx context.Context, template *domain.NotificationTemplate) error
 }
 
 type templateRepository struct {
@@ -26,4 +27,8 @@ func (r *templateRepository) GetByEventType(ctx context.Context, eventType domai
 		return nil, err
 	}
 	return &template, nil
+}
+
+func (r *templateRepository) Create(ctx context.Context, template *domain.NotificationTemplate) error {
+	return r.db.WithContext(ctx).Create(template).Error
 }

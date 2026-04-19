@@ -63,6 +63,11 @@ func main() {
 	notificationRepo := repository.NewNotificationRepository(database)
 	templateRepo := repository.NewTemplateRepository(database)
 	notificationService := service.NewNotificationService(notificationRepo, templateRepo)
+
+	if err := notificationService.SeedTemplates(context.Background()); err != nil {
+		log.Error("failed to seed notification templates", zap.Error(err))
+	}
+
 	notificationHandler := handler.NewNotificationHandler(notificationService)
 
 	gin.SetMode(gin.ReleaseMode)

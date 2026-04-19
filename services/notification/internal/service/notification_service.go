@@ -15,6 +15,7 @@ import (
 
 type NotificationService interface {
 	ProcessEvent(ctx context.Context, event dto.SendNotificationRequest) error
+	SeedTemplates(ctx context.Context) error
 }
 
 type notificationService struct {
@@ -30,13 +31,11 @@ func NewNotificationService(repo repository.NotificationRepository, templateRepo
 }
 
 func (s *notificationService) ProcessEvent(ctx context.Context, event dto.SendNotificationRequest) error {
-	// 1. Get template correspond with event type
 	tmpl, err := s.templateRepo.GetByEventType(ctx, event.EventType)
 	if err != nil {
 		return fmt.Errorf("failed to get template for event %s: %w", event.EventType, err)
 	}
 
-	// 2. Render content from Payload
 	title, err := s.render(tmpl.Subject, event.Payload)
 	if err != nil {
 		return fmt.Errorf("failed to render title: %w", err)
@@ -47,7 +46,6 @@ func (s *notificationService) ProcessEvent(ctx context.Context, event dto.SendNo
 		return fmt.Errorf("failed to render content: %w", err)
 	}
 
-	// 3. Xử lý Metadata
 	var metadataStr string
 	if event.Metadata != nil {
 		b, err := json.Marshal(event.Metadata)
@@ -57,7 +55,6 @@ func (s *notificationService) ProcessEvent(ctx context.Context, event dto.SendNo
 		metadataStr = string(b)
 	}
 
-	// 4. Tạo đối tượng Notification với Channel lấy từ Template
 	notification := &domain.Notification{
 		EventType: tmpl.EventType,
 		UserID:    event.UserID,
@@ -68,7 +65,6 @@ func (s *notificationService) ProcessEvent(ctx context.Context, event dto.SendNo
 		Content:   content,
 	}
 
-	// Lấy recipient từ payload (có thể quy định key cứng hoặc lấy từ User Profile tùy logic sau này)
 	if v, ok := event.Payload["recipient"].(string); ok {
 		notification.Recipient = v
 	}
