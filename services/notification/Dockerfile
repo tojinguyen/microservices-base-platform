@@ -5,15 +5,21 @@ RUN apk add --no-cache git
 
 WORKDIR /app
 
-COPY go.work go.work.sum ./
-COPY pkg/ ./pkg/
+RUN go install github.com/swaggo/swag/cmd/swag@latest
+
+COPY pkg/go.mod ./pkg/
 COPY services/notification/go.mod ./services/notification/
 
+RUN go work init && \
+    go work use ./pkg ./services/notification
+
+RUN cd pkg && go mod download
 RUN cd services/notification && go mod download
 
-COPY services/notification/migrations/ ./services/notification/migrations/
-COPY services/notification/internal/ ./services/notification/internal/
-COPY services/notification/cmd/ ./services/notification/cmd/
+COPY pkg/ ./pkg/
+COPY services/notification/ ./services/notification/
+
+RUN cd services/notification && swag init -g cmd/main.go --parseDependency --parseInternal
 
 RUN CGO_ENABLED=0 GOOS=linux go build -o notification-service ./services/notification/cmd/main.go
 
