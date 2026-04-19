@@ -1,115 +1,94 @@
 package service
 
 import (
-	appErrors "backend/pkg/errors"
-	"backend/pkg/logger"
 	"context"
+	"encoding/json"
+
+	"bytes"
 	"fmt"
-	"strings"
-	"time"
+	"text/template"
 
 	"github.com/tojinguyen/notification/internal/domain"
 	"github.com/tojinguyen/notification/internal/dto"
 	"github.com/tojinguyen/notification/internal/repository"
-	"go.uber.org/zap"
 )
 
 type NotificationService interface {
-	ProcessEvent(ctx context.Context, event dto.NotificationEvent) error
+	ProcessEvent(ctx context.Context, event dto.SendNotificationRequest) error
 }
 
 type notificationService struct {
-	repo   repository.NotificationRepository
-	sender EmailSender
+	repo         repository.NotificationRepository
+	templateRepo repository.TemplateRepository
 }
 
-func NewNotificationService(repo repository.NotificationRepository, sender EmailSender) NotificationService {
+func NewNotificationService(repo repository.NotificationRepository, templateRepo repository.TemplateRepository) NotificationService {
 	return &notificationService{
-		repo:   repo,
-		sender: sender,
+		repo:         repo,
+		templateRepo: templateRepo,
 	}
 }
 
-func (s *notificationService) ProcessEvent(ctx context.Context, event dto.NotificationEvent) error {
-	if err := validateEvent(event); err != nil {
-		return err
-	}
-
-	exists, err := s.repo.ExistsByEventID(ctx, event.EventID)
+func (s *notificationService) ProcessEvent(ctx context.Context, event dto.SendNotificationRequest) error {
+	// 1. Get template correspond with event type
+	tmpl, err := s.templateRepo.GetByEventType(ctx, event.EventType)
 	if err != nil {
-		return err
-	}
-	if exists {
-		logger.FromContext(ctx).Info("notification event already processed", zap.String("event_id", event.EventID))
-		return nil
+		return fmt.Errorf("failed to get template for event %s: %w", event.EventType, err)
 	}
 
-	subject := event.Payload.Subject
-	if strings.TrimSpace(subject) == "" {
-		subject = fmt.Sprintf("Notification: %s", event.EventType)
+	// 2. Render content from Payload
+	title, err := s.render(tmpl.Subject, event.Payload)
+	if err != nil {
+		return fmt.Errorf("failed to render title: %w", err)
 	}
 
+	content, err := s.render(tmpl.Content, event.Payload)
+	if err != nil {
+		return fmt.Errorf("failed to render content: %w", err)
+	}
+
+	// 3. Xử lý Metadata
+	var metadataStr string
+	if event.Metadata != nil {
+		b, err := json.Marshal(event.Metadata)
+		if err != nil {
+			return err
+		}
+		metadataStr = string(b)
+	}
+
+	// 4. Tạo đối tượng Notification với Channel lấy từ Template
 	notification := &domain.Notification{
-		EventID:        event.EventID,
-		EventType:      event.EventType,
-		UserID:         event.Payload.UserID,
-		Channel:        domain.NotificationChannelEmail,
-		RecipientEmail: event.Payload.Email,
-		Subject:        subject,
-		Content:        event.Payload.Content,
-		Status:         domain.NotificationStatusPending,
+		EventType: tmpl.EventType,
+		UserID:    event.UserID,
+		Channel:   tmpl.Channel,
+		Status:    domain.NotificationStatusPending,
+		Metadata:  metadataStr,
+		Subject:   title,
+		Content:   content,
+	}
+
+	// Lấy recipient từ payload (có thể quy định key cứng hoặc lấy từ User Profile tùy logic sau này)
+	if v, ok := event.Payload["recipient"].(string); ok {
+		notification.Recipient = v
 	}
 
 	if err := s.repo.Create(ctx, notification); err != nil {
 		return err
 	}
-
-	sendErr := s.sender.Send(ctx, EmailMessage{
-		To:      notification.RecipientEmail,
-		Subject: notification.Subject,
-		Body:    notification.Content,
-	})
-	if sendErr != nil {
-		errorMessage := trimErrorMessage(sendErr.Error(), 1000)
-		if err := s.repo.UpdateDeliveryStatus(ctx, notification.Id, domain.NotificationStatusFailed, errorMessage, nil); err != nil {
-			return err
-		}
-
-		logger.FromContext(ctx).Warn("notification email sending failed",
-			zap.String("event_id", notification.EventID),
-			zap.String("recipient", notification.RecipientEmail),
-			zap.Error(sendErr),
-		)
-		return nil
-	}
-
-	sentAt := time.Now().UTC()
-	if err := s.repo.UpdateDeliveryStatus(ctx, notification.Id, domain.NotificationStatusSent, "", &sentAt); err != nil {
-		return err
-	}
-
 	return nil
 }
 
-func validateEvent(event dto.NotificationEvent) error {
-	if strings.TrimSpace(event.EventType) == "" {
-		return appErrors.BadRequest(nil, "event_type is required")
+func (s *notificationService) render(tmplStr string, data interface{}) (string, error) {
+	t, err := template.New("notification").Parse(tmplStr)
+	if err != nil {
+		return "", err
 	}
-	if strings.TrimSpace(event.Payload.UserID) == "" {
-		return appErrors.BadRequest(nil, "payload.user_id is required")
-	}
-	if strings.TrimSpace(event.Payload.Email) == "" {
-		return appErrors.BadRequest(nil, "payload.email is required")
-	}
-	if strings.TrimSpace(event.Payload.Content) == "" {
-		return appErrors.BadRequest(nil, "payload.content is required")
-	}
-	return nil
-}
 
-func trimErrorMessage(input string, maxLen int) string {
-	if maxLen <= 0 || len(input) <= maxLen {
-		return input
+	var buf bytes.Buffer
+	if err := t.Execute(&buf, data); err != nil {
+		return "", err
 	}
-	return input[:maxLen]
+
+	return buf.String(), nil
 }

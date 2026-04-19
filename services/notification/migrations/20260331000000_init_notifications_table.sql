@@ -9,11 +9,13 @@ CREATE TABLE notifications (
     event_type VARCHAR(100) NOT NULL,
     user_id VARCHAR(100) NOT NULL,
     channel VARCHAR(20) NOT NULL DEFAULT 'email',
-    recipient_email VARCHAR(255) NOT NULL,
+    recipient VARCHAR(255) NOT NULL,
     subject VARCHAR(255) NOT NULL,
     content TEXT NOT NULL,
     status VARCHAR(20) NOT NULL DEFAULT 'pending',
+    retry_count INT DEFAULT 0,
     error_message TEXT,
+    metadata TEXT,
     sent_at TIMESTAMP WITH TIME ZONE
 );
 

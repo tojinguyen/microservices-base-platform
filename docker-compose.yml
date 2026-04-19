@@ -13,7 +13,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U user_admin -d identity_db"]
+      test: [ "CMD-SHELL", "pg_isready -U user_admin -d identity_db" ]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -28,7 +28,7 @@ services:
     volumes:
       - postgres_notification_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U user_admin -d notification_db"]
+      test: [ "CMD-SHELL", "pg_isready -U user_admin -d notification_db" ]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -39,7 +39,7 @@ services:
     ports:
       - "6379:6379"
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: [ "CMD", "redis-cli", "ping" ]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -60,7 +60,7 @@ services:
       - "5672:5672"
       - "15672:15672"
     healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      test: [ "CMD", "rabbitmq-diagnostics", "-q", "ping" ]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -76,11 +76,11 @@ services:
   identity-service:
     image: identity-service
     build:
-      context: .                         
+      context: .
       dockerfile: services/identity/Dockerfile
     container_name: identity-service
     ports:
-      - "8080:8080" 
+      - "8080:8080"
     depends_on:
       postgres-db:
         condition: service_healthy
@@ -108,25 +108,8 @@ services:
         condition: service_healthy
       mailhog:
         condition: service_started
-    environment:
-      - PORT=8082
-      - TIME_GRACE=10
-      - DATABASE_HOST=postgres-notification
-      - DATABASE_PORT=5432
-      - DATABASE_USER=user_admin
-      - DATABASE_PASSWORD=password123
-      - DATABASE_DBNAME=notification_db
-      - DATABASE_SSLMODE=disable
-      - BROKER_HOST=rabbitmq
-      - BROKER_PORT=5672
-      - BROKER_USER=guest
-      - BROKER_PASSWORD=guest
-      - QUEUE_NOTIFICATION_EVENTS=notification.events
-      - SMTP_HOST=mailhog
-      - SMTP_PORT=1025
-      - SMTP_USERNAME=
-      - SMTP_PASSWORD=
-      - SMTP_FROM=no-reply@microservices.local
+    env_file:
+      - services/notification/.env
 
 volumes:
   postgres_data:

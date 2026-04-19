@@ -23,7 +23,7 @@ func NewNotificationHandler(svc service.NotificationService) *NotificationHandle
 // @Description check service health
 // @Tags health
 // @Produce json
-// @Success 200 {object} response.StandardResponse
+// @Success 200 {object} response.StandardResponse{data=dto.HealthResponse}
 // @Router /health [get]
 func (h *NotificationHandler) Health(c *gin.Context) {
 	response.OK(c.Writer, dto.HealthResponse{
@@ -38,13 +38,13 @@ func (h *NotificationHandler) Health(c *gin.Context) {
 // @Tags notifications
 // @Accept json
 // @Produce json
-// @Param event body dto.NotificationEvent true "Notification Event"
-// @Success 200 {object} response.StandardResponse
-// @Failure 400 {object} response.StandardResponse
-// @Failure 500 {object} response.StandardResponse
+// @Param event body dto.SendNotificationRequest true "Notification Event"
+// @Success 200 {object} response.StandardResponse{data=dto.SendNotificationResponse}
+// @Failure 400 {object} response.StandardResponse{error=object{code=int,message=string}}
+// @Failure 500 {object} response.StandardResponse{error=object{code=int,message=string}}
 // @Router /send [post]
 func (h *NotificationHandler) SendNotification(c *gin.Context) {
-	var req dto.NotificationEvent
+	var req dto.SendNotificationRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Error(c.Writer, c.Request, err)
 		return

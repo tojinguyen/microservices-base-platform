@@ -16,7 +16,6 @@ import (
 	"github.com/gin-gonic/gin"
 	_ "github.com/tojinguyen/notification/docs"
 	notificationConfig "github.com/tojinguyen/notification/internal/config"
-	"github.com/tojinguyen/notification/internal/consumer"
 	"github.com/tojinguyen/notification/internal/handler"
 	"github.com/tojinguyen/notification/internal/repository"
 	"github.com/tojinguyen/notification/internal/route"
@@ -62,10 +61,8 @@ func main() {
 	defer brokerClient.Close()
 
 	notificationRepo := repository.NewNotificationRepository(database)
-	emailSender := service.NewSMTPSender(cfg.SMTP.Host, cfg.SMTP.Port, cfg.SMTP.Username, cfg.SMTP.Password, cfg.SMTP.From)
-	notificationService := service.NewNotificationService(notificationRepo, emailSender)
-	notificationConsumer := consumer.NewNotificationConsumer(brokerClient, notificationService, cfg.Queue.NotificationEvents)
-
+	templateRepo := repository.NewTemplateRepository(database)
+	notificationService := service.NewNotificationService(notificationRepo, templateRepo)
 	notificationHandler := handler.NewNotificationHandler(notificationService)
 
 	gin.SetMode(gin.ReleaseMode)
@@ -79,14 +76,6 @@ func main() {
 		Handler: r,
 	}
 
-	consumerCtx, cancelConsumer := context.WithCancel(context.Background())
-	defer cancelConsumer()
-
-	if err := notificationConsumer.Start(consumerCtx); err != nil {
-		log.Panic("failed to start notification consumer", zap.Error(err))
-	}
-	log.Info("notification consumer started", zap.String("queue", cfg.Queue.NotificationEvents))
-
 	go func() {
 		log.Info("server starting", zap.Int("port", cfg.ServerPort))
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -97,8 +86,6 @@ func main() {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
-
-	cancelConsumer()
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(cfg.TimeGrace)*time.Second)
 	defer cancel()
