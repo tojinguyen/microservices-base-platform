@@ -9,6 +9,7 @@ const (
 	ModeAPI           = "api"
 	ModeWorkerPending = "worker-pending"
 	ModeWorkerEmail   = "worker-email"
+	ModeWorkerWebhook = "worker-webhook"
 )
 
 type Config struct {
@@ -31,7 +32,8 @@ type SMTPConfig struct {
 }
 
 type QueueConfig struct {
-	Exchange string `mapstructure:"exchange"`
+	Exchange       string `mapstructure:"exchange"`
+	WebhookMailpit string `mapstructure:"webhook_mailpit"`
 }
 
 type WorkerConfig struct {

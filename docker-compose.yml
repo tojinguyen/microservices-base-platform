@@ -67,9 +67,11 @@ services:
       timeout: 5s
       retries: 5
 
-  mailhog:
-    image: mailhog/mailhog:latest
-    container_name: platform-mailhog
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: platform-mailpit
+    environment:
+      - MP_WEBHOOK_URL=http://notification-service:8082/api/v1/notifications/webhooks/mailpit
     ports:
       - "1025:1025"
       - "8025:8025"
@@ -107,7 +109,7 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
-      mailhog:
+      mailpit:
         condition: service_started
     env_file:
       - services/notification/.env
@@ -133,7 +135,7 @@ services:
     depends_on:
       rabbitmq:
         condition: service_healthy
-      mailhog:
+      mailpit:
         condition: service_started
       postgres-notification:
         condition: service_healthy
@@ -141,6 +143,21 @@ services:
       - services/notification/.env
     environment:
       - APP_MODE=worker-email
+
+  notification-worker-webhook:
+    image: notification-service
+    container_name: notification-worker-webhook
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+      postgres-notification:
+        condition: service_healthy
+    env_file:
+      - services/notification/.env
+    environment:
+      - APP_MODE=worker-webhook
 
 volumes:
   postgres_data:

@@ -15,5 +15,6 @@ func RegisterRoutes(r *gin.Engine, notificationHandler *handler.NotificationHand
 	{
 		v1.GET("/health", notificationHandler.Health)
 		v1.POST("/send", notificationHandler.SendNotification)
+		v1.POST("/webhooks/mailpit", notificationHandler.HandleMailpitWebhook)
 	}
 }

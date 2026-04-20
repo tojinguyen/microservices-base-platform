@@ -67,6 +67,8 @@ func main() {
 		runPendingWorker(ctx, cfg, database)
 	case notificationConfig.ModeWorkerEmail:
 		runEmailWorker(ctx, cfg, database)
+	case notificationConfig.ModeWorkerWebhook:
+		runWebhookWorker(ctx, cfg, database)
 	case notificationConfig.ModeAPI:
 		runAPI(ctx, cfg, database)
 	default:
@@ -77,9 +79,15 @@ func main() {
 
 func runAPI(ctx context.Context, cfg *notificationConfig.Config, database *gorm.DB) {
 	log := logger.L()
+	brokerClient, err := broker.NewRabbitMQ(cfg.Broker)
+	if err != nil {
+		log.Panic("failed to connect to broker", zap.Error(err))
+	}
+	defer brokerClient.Close()
+
 	notificationRepo := repository.NewNotificationRepository(database)
 	templateRepo := repository.NewTemplateRepository(database)
-	notificationService := service.NewNotificationService(notificationRepo, templateRepo)
+	notificationService := service.NewNotificationService(notificationRepo, templateRepo, brokerClient, cfg)
 
 	if err := notificationService.SeedTemplates(context.Background()); err != nil {
 		log.Error("failed to seed notification templates", zap.Error(err))
@@ -143,4 +151,22 @@ func runEmailWorker(ctx context.Context, cfg *notificationConfig.Config, databas
 
 	log.Info("Email worker starting")
 	emailWorker.Start(ctx)
+}
+
+func runWebhookWorker(ctx context.Context, cfg *notificationConfig.Config, database *gorm.DB) {
+	log := logger.L()
+	brokerClient, err := broker.NewRabbitMQ(cfg.Broker)
+	if err != nil {
+		log.Panic("failed to connect to broker", zap.Error(err))
+	}
+	defer brokerClient.Close()
+
+	notificationRepo := repository.NewNotificationRepository(database)
+	templateRepo := repository.NewTemplateRepository(database)
+	notificationService := service.NewNotificationService(notificationRepo, templateRepo, brokerClient, cfg)
+
+	webhookWorker := worker.NewWebhookWorker(notificationService, brokerClient, cfg)
+
+	log.Info("Webhook worker starting")
+	webhookWorker.Start(ctx)
 }

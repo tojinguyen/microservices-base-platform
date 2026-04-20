@@ -27,5 +27,6 @@ const (
 	NotificationStatusPending    NotificationStatus = "pending"
 	NotificationStatusProcessing NotificationStatus = "processing"
 	NotificationStatusSent       NotificationStatus = "sent"
+	NotificationStatusDelivering NotificationStatus = "delivering"
 	NotificationStatusFailed     NotificationStatus = "failed"
 )

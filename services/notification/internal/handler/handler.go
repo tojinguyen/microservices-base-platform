@@ -59,3 +59,26 @@ func (h *NotificationHandler) SendNotification(c *gin.Context) {
 		Message: "notification sent successfully",
 	})
 }
+
+// HandleMailpitWebhook godoc
+// @Summary Handle Mailpit webhook
+// @Description Callback from Mailpit when an email is received
+// @Tags webhooks
+// @Accept json
+// @Produce json
+// @Success 200 {object} response.StandardResponse{data=string}
+// @Router /webhooks/mailpit [post]
+func (h *NotificationHandler) HandleMailpitWebhook(c *gin.Context) {
+	var webhook dto.MailpitWebhook
+	if err := c.ShouldBindJSON(&webhook); err != nil {
+		response.Error(c.Writer, c.Request, err)
+		return
+	}
+
+	if err := h.service.PublishWebhookResponse(c.Request.Context(), webhook); err != nil {
+		response.Error(c.Writer, c.Request, err)
+		return
+	}
+
+	response.OK(c.Writer, "webhook accepted for processing")
+}
