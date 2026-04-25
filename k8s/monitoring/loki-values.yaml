@@ -1,0 +1,18 @@
+grafana:
+  enabled: true
+  grafana.ini:
+    date_formats:
+      default_timezone: Asia/Ho_Chi_Minh
+
+promtail:
+  enabled: true
+  config:
+    snippets:
+      pipelineStages:
+        - docker: {}
+
+loki:
+  isDefault: true
+  persistence:
+    enabled: true
+    size: 5Gi
