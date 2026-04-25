@@ -1,0 +1,198 @@
+---
+# 1. ConfigMap: Cấu hình chung cho tất cả Notification components
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: notification-config
+  namespace: microservices-platform
+data:
+  PORT: "8082"
+  DATABASE_HOST: "postgres-notification-service"
+  DATABASE_PORT: "5432"
+  DATABASE_USER: "user_admin"
+  DATABASE_DBNAME: "notification_db"
+  DATABASE_SSLMODE: "disable"
+  BROKER_HOST: "rabbitmq-service"
+  BROKER_PORT: "5672"
+  SMTP_HOST: "mailpit-service"
+  SMTP_PORT: "1025"
+
+---
+# 2. Service: Expose Notification API để các service khác gọi vào
+apiVersion: v1
+kind: Service
+metadata:
+  name: notification-service
+  namespace: microservices-platform
+spec:
+  type: LoadBalancer
+  selector:
+    app: notification-api
+  ports:
+    - protocol: TCP
+      port: 8082
+      targetPort: 8082
+
+---
+# 3. Deployment A: Notification API (HTTP Server)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notification-api
+  namespace: microservices-platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: notification-api
+  template:
+    metadata:
+      labels:
+        app: notification-api
+    spec:
+      containers:
+        - name: notification
+          image: notification-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8082
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "128Mi"
+              cpu: "200m"
+          envFrom:
+            - configMapRef:
+                name: notification-config
+            - secretRef:
+                name: notification-secret
+          env:
+            - name: APP_MODE
+              value: "api"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8082
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8082
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            failureThreshold: 3
+
+---
+# 4. Deployment B: Worker xử lý Pending notifications từ DB → RabbitMQ queue
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notification-worker-pending
+  namespace: microservices-platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: notification-worker-pending
+  template:
+    metadata:
+      labels:
+        app: notification-worker-pending
+    spec:
+      containers:
+        - name: worker
+          image: notification-service:latest
+          imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "128Mi"
+              cpu: "200m"
+          envFrom:
+            - configMapRef:
+                name: notification-config
+            - secretRef:
+                name: notification-secret
+          env:
+            - name: APP_MODE
+              value: "worker-pending"
+
+---
+# 5. Deployment C: Worker gửi Email (consume từ RabbitMQ → SMTP)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notification-worker-email
+  namespace: microservices-platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: notification-worker-email
+  template:
+    metadata:
+      labels:
+        app: notification-worker-email
+    spec:
+      containers:
+        - name: worker
+          image: notification-service:latest
+          imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "128Mi"
+              cpu: "200m"
+          envFrom:
+            - configMapRef:
+                name: notification-config
+            - secretRef:
+                name: notification-secret
+          env:
+            - name: APP_MODE
+              value: "worker-email"
+
+---
+# 6. Deployment D: Worker xử lý Webhook callbacks
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notification-worker-webhook
+  namespace: microservices-platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: notification-worker-webhook
+  template:
+    metadata:
+      labels:
+        app: notification-worker-webhook
+    spec:
+      containers:
+        - name: worker
+          image: notification-service:latest
+          imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "128Mi"
+              cpu: "200m"
+          envFrom:
+            - configMapRef:
+                name: notification-config
+            - secretRef:
+                name: notification-secret
+          env:
+            - name: APP_MODE
+              value: "worker-webhook"

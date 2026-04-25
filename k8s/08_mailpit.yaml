@@ -1,0 +1,72 @@
+---
+# 1. ConfigMap: Cấu hình Mailpit
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mailpit-config
+  namespace: microservices-platform
+data:
+  # Webhook gửi event về notification-service khi có email đến
+  MP_WEBHOOK_URL: "http://notification-service:8082/api/v1/notifications/webhooks/mailpit"
+
+---
+# 2. Service: Expose SMTP port (1025) và Web UI (8025)
+apiVersion: v1
+kind: Service
+metadata:
+  name: mailpit-service
+  namespace: microservices-platform
+spec:
+  selector:
+    app: mailpit
+  ports:
+    - name: smtp
+      protocol: TCP
+      port: 1025
+      targetPort: 1025
+    - name: ui
+      protocol: TCP
+      port: 8025
+      targetPort: 8025
+
+---
+# 3. Deployment: Mailpit (SMTP server giả lập cho development)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mailpit
+  namespace: microservices-platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mailpit
+  template:
+    metadata:
+      labels:
+        app: mailpit
+    spec:
+      containers:
+        - name: mailpit
+          # Pin version cụ thể, tránh dùng :latest
+          image: axllent/mailpit:v1.21
+          ports:
+            - name: smtp
+              containerPort: 1025
+            - name: ui
+              containerPort: 8025
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "128Mi"
+              cpu: "100m"
+          envFrom:
+            - configMapRef:
+                name: mailpit-config
+          readinessProbe:
+            tcpSocket:
+              port: 1025
+            initialDelaySeconds: 5
+            periodSeconds: 10

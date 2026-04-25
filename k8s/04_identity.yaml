@@ -1,26 +1,28 @@
 ---
-# 1. Create Service to expose port outside (browser can access)
+# 1. Service: Expose identity-service ra ngoài qua LoadBalancer
 apiVersion: v1
 kind: Service
 metadata:
   name: identity-service
+  namespace: microservices-platform
 spec:
-  type: LoadBalancer 
+  type: LoadBalancer
   selector:
     app: identity
   ports:
     - protocol: TCP
-      port: 8081       
-      targetPort: 8080 
+      port: 8081
+      targetPort: 8080
 
 ---
-# 2. Create Deployment for Identity App
+# 2. Deployment: Identity Service
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: identity-deployment
+  namespace: microservices-platform
 spec:
-  replicas: 1 # Run 1 instance of the app
+  replicas: 1
   selector:
     matchLabels:
       app: identity
@@ -32,12 +34,33 @@ spec:
       containers:
         - name: identity
           image: identity-service:v1.0.0
-          imagePullPolicy: IfNotPresent # Important: Tell K8s to use local image, not pull from registry
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
-          # Push ALL environment variables from ConfigMap and Secret into Container
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "250m"
+          # Inject tất cả config và secret vào container
           envFrom:
             - configMapRef:
                 name: identity-config
             - secretRef:
                 name: identity-secret
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            failureThreshold: 3

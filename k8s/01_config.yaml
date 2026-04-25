@@ -2,10 +2,11 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: identity-config
+  namespace: microservices-platform
 data:
   PORT: "8080"
   TIME_GRACE: "10"
-  DATABASE_HOST: "postgres-service" # Point to the postgres service in Kubernetes
+  DATABASE_HOST: "postgres-identity-service"
   DATABASE_PORT: "5432"
   DATABASE_USER: "user_admin"
   DATABASE_DBNAME: "identity_db"

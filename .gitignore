@@ -28,3 +28,8 @@ profile.cov
 # .vscode/
 
 repomix/
+
+# K8s Secrets - NEVER commit actual secret files
+# Commit only the *.example files to show teammates what values are needed
+k8s/02_secret.yaml
+k8s/05_secret_notification.yaml
