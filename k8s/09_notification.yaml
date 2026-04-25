@@ -7,6 +7,7 @@ metadata:
   namespace: microservices-platform
 data:
   PORT: "8082"
+  TIME_GRACE: "10"
   DATABASE_HOST: "postgres-notification-service"
   DATABASE_PORT: "5432"
   DATABASE_USER: "user_admin"
@@ -14,8 +15,15 @@ data:
   DATABASE_SSLMODE: "disable"
   BROKER_HOST: "rabbitmq-service"
   BROKER_PORT: "5672"
+  BROKER_USER: "guest"
+  QUEUE_EXCHANGE: "notification.direct"
+  QUEUE_WEBHOOK_MAILPIT: "webhook_mailpit"
   SMTP_HOST: "mailpit-service"
   SMTP_PORT: "1025"
+  SMTP_FROM: "no-reply@microservices.local"
+  SMTP_USERNAME: ""
+  WORKER_BATCH_SIZE: "10"
+  WORKER_INTERVAL: "5"
 
 ---
 # 2. Service: Expose Notification API để các service khác gọi vào
@@ -72,15 +80,13 @@ spec:
             - name: APP_MODE
               value: "api"
           readinessProbe:
-            httpGet:
-              path: /health
+            tcpSocket:
               port: 8082
             initialDelaySeconds: 10
             periodSeconds: 10
             failureThreshold: 3
           livenessProbe:
-            httpGet:
-              path: /health
+            tcpSocket:
               port: 8082
             initialDelaySeconds: 30
             periodSeconds: 30
