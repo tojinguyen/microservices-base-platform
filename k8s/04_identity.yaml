@@ -6,7 +6,7 @@ metadata:
   name: identity-service
   namespace: microservices-platform
 spec:
-  type: LoadBalancer
+  type: ClusterIP
   selector:
     app: identity
   ports:

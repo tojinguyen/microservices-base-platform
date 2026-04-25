@@ -1,0 +1,56 @@
+---
+# Ingress — Điểm vào DUY NHẤT từ bên ngoài vào toàn bộ platform
+#
+# Cách hoạt động:
+#   Internet → 1 External IP (Ingress Controller) → route theo path:
+#     /api/v1/auth/*          → identity-service:8080
+#     /api/v1/notifications/* → notification-service:8082
+#
+# Yêu cầu: Cần cài Ingress Controller trước (xem README bên dưới)
+# - Local (Minikube): minikube addons enable ingress
+# - Local (kind):     kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
+# - Cloud:            helm install ingress-nginx ingress-nginx/ingress-nginx
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: platform-ingress
+  namespace: microservices-platform
+  annotations:
+    # Dùng nginx ingress controller
+    kubernetes.io/ingress.class: "nginx"
+    # Strip prefix trước khi forward vào service
+    # Ví dụ: /api/v1/auth/login → /api/v1/auth/login (giữ nguyên path)
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    # Timeout settings
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "30"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
+spec:
+  rules:
+    # Rule cho local development (không có domain thật)
+    - http:
+        paths:
+          # Route: Identity Service — xử lý auth, user, OAuth
+          - path: /api/v1/auth(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: identity-service
+                port:
+                  number: 8080
+
+          # Route: Notification Service — xử lý notifications, webhooks
+          - path: /api/v1/notifications(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: notification-service
+                port:
+                  number: 8082
+
+  # --- TLS (Bỏ comment khi có domain thật + cert-manager) ---
+  # tls:
+  #   - hosts:
+  #       - api.yourdomain.com
+  #     secretName: platform-tls-cert

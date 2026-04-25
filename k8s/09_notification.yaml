@@ -25,7 +25,7 @@ metadata:
   name: notification-service
   namespace: microservices-platform
 spec:
-  type: LoadBalancer
+  type: ClusterIP
   selector:
     app: notification-api
   ports:
