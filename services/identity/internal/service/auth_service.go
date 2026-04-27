@@ -72,6 +72,7 @@ func (s *authService) Register(ctx context.Context, email, password, name string
 }
 
 func (s *authService) Login(ctx context.Context, email, password string) (*dto.LoginResponse, error) {
+	logger.FromContext(ctx).Info("User login", zap.String("email", email))
 	user, err := s.userRepo.GetByEmail(ctx, email)
 	if err != nil {
 		return nil, err

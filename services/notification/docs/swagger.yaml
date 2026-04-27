@@ -1,25 +1,48 @@
 basePath: /api/v1/notifications
 definitions:
-  github_com_tojinguyen_notification_internal_dto.NotificationEvent:
+  domain.EventType:
+    enum:
+    - auth_otp
+    - auth_login_alert
+    - order_created
+    - payment_success
+    - promotion_campaign
+    type: string
+    x-enum-varnames:
+    - EventOTP
+    - EventLoginAlert
+    - EventOrderCreated
+    - EventPaymentSuccess
+    - EventPromotion
+  dto.HealthResponse:
     properties:
-      event_id:
+      service:
         type: string
-      event_type:
+      status:
         type: string
-      occurred_at:
-        type: string
-      payload:
-        $ref: '#/definitions/github_com_tojinguyen_notification_internal_dto.NotificationPayload'
     type: object
-  github_com_tojinguyen_notification_internal_dto.NotificationPayload:
+  dto.SendNotificationRequest:
     properties:
-      content:
-        type: string
-      email:
-        type: string
-      subject:
-        type: string
+      event_type:
+        $ref: '#/definitions/domain.EventType'
+      metadata:
+        additionalProperties: true
+        type: object
+      payload:
+        additionalProperties: true
+        type: object
       user_id:
+        type: string
+    required:
+    - event_type
+    - payload
+    - user_id
+    type: object
+  dto.SendNotificationResponse:
+    properties:
+      message:
+        type: string
+      notification_id:
         type: string
     type: object
   response.StandardResponse:
@@ -30,6 +53,7 @@ definitions:
       success:
         type: boolean
     type: object
+host: localhost
 info:
   contact: {}
   description: This is a notification service API
@@ -45,7 +69,12 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/response.StandardResponse'
+            allOf:
+            - $ref: '#/definitions/response.StandardResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.HealthResponse'
+              type: object
       summary: Health check
       tags:
       - health
@@ -61,23 +90,68 @@ paths:
         name: event
         required: true
         schema:
-          $ref: '#/definitions/github_com_tojinguyen_notification_internal_dto.NotificationEvent'
+          $ref: '#/definitions/dto.SendNotificationRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/response.StandardResponse'
+            allOf:
+            - $ref: '#/definitions/response.StandardResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.SendNotificationResponse'
+              type: object
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/response.StandardResponse'
+            allOf:
+            - $ref: '#/definitions/response.StandardResponse'
+            - properties:
+                error:
+                  properties:
+                    code:
+                      type: integer
+                    message:
+                      type: string
+                  type: object
+              type: object
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/response.StandardResponse'
+            allOf:
+            - $ref: '#/definitions/response.StandardResponse'
+            - properties:
+                error:
+                  properties:
+                    code:
+                      type: integer
+                    message:
+                      type: string
+                  type: object
+              type: object
       summary: Send notification
       tags:
       - notifications
+  /webhooks/mailpit:
+    post:
+      consumes:
+      - application/json
+      description: Callback from Mailpit when an email is received
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.StandardResponse'
+            - properties:
+                data:
+                  type: string
+              type: object
+      summary: Handle Mailpit webhook
+      tags:
+      - webhooks
 swagger: "2.0"

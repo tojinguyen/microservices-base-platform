@@ -29,7 +29,19 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/response.StandardResponse"
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.StandardResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/dto.HealthResponse"
+                                        }
+                                    }
+                                }
+                            ]
                         }
                     }
                 }
@@ -55,7 +67,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/github_com_tojinguyen_notification_internal_dto.NotificationEvent"
+                            "$ref": "#/definitions/dto.SendNotificationRequest"
                         }
                     }
                 ],
@@ -63,19 +75,106 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/response.StandardResponse"
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.StandardResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/dto.SendNotificationResponse"
+                                        }
+                                    }
+                                }
+                            ]
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/response.StandardResponse"
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.StandardResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "error": {
+                                            "type": "object",
+                                            "properties": {
+                                                "code": {
+                                                    "type": "integer"
+                                                },
+                                                "message": {
+                                                    "type": "string"
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/response.StandardResponse"
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.StandardResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "error": {
+                                            "type": "object",
+                                            "properties": {
+                                                "code": {
+                                                    "type": "integer"
+                                                },
+                                                "message": {
+                                                    "type": "string"
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/webhooks/mailpit": {
+            "post": {
+                "description": "Callback from Mailpit when an email is received",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "webhooks"
+                ],
+                "summary": "Handle Mailpit webhook",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.StandardResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            ]
                         }
                     }
                 }
@@ -83,36 +182,65 @@ const docTemplate = `{
         }
     },
     "definitions": {
-        "github_com_tojinguyen_notification_internal_dto.NotificationEvent": {
+        "domain.EventType": {
+            "type": "string",
+            "enum": [
+                "auth_otp",
+                "auth_login_alert",
+                "order_created",
+                "payment_success",
+                "promotion_campaign"
+            ],
+            "x-enum-varnames": [
+                "EventOTP",
+                "EventLoginAlert",
+                "EventOrderCreated",
+                "EventPaymentSuccess",
+                "EventPromotion"
+            ]
+        },
+        "dto.HealthResponse": {
             "type": "object",
             "properties": {
-                "event_id": {
+                "service": {
                     "type": "string"
                 },
-                "event_type": {
+                "status": {
                     "type": "string"
-                },
-                "occurred_at": {
-                    "type": "string"
-                },
-                "payload": {
-                    "$ref": "#/definitions/github_com_tojinguyen_notification_internal_dto.NotificationPayload"
                 }
             }
         },
-        "github_com_tojinguyen_notification_internal_dto.NotificationPayload": {
+        "dto.SendNotificationRequest": {
             "type": "object",
+            "required": [
+                "event_type",
+                "payload",
+                "user_id"
+            ],
             "properties": {
-                "content": {
-                    "type": "string"
+                "event_type": {
+                    "$ref": "#/definitions/domain.EventType"
                 },
-                "email": {
-                    "type": "string"
+                "metadata": {
+                    "type": "object",
+                    "additionalProperties": true
                 },
-                "subject": {
-                    "type": "string"
+                "payload": {
+                    "type": "object",
+                    "additionalProperties": true
                 },
                 "user_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "dto.SendNotificationResponse": {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string"
+                },
+                "notification_id": {
                     "type": "string"
                 }
             }
@@ -134,7 +262,7 @@ const docTemplate = `{
 // SwaggerInfo holds exported Swagger Info so clients can modify it
 var SwaggerInfo = &swag.Spec{
 	Version:          "1.0",
-	Host:             "",
+	Host:             "localhost",
 	BasePath:         "/api/v1/notifications",
 	Schemes:          []string{},
 	Title:            "Notification Service API",

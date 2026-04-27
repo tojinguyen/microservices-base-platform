@@ -94,7 +94,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/github_com_tojinguyen_identity_internal_dto.LoginRequest"
+                            "$ref": "#/definitions/dto.LoginRequest"
                         }
                     }
                 ],
@@ -140,7 +140,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/github_com_tojinguyen_identity_internal_dto.LogoutRequest"
+                            "$ref": "#/definitions/dto.LogoutRequest"
                         }
                     }
                 ],
@@ -186,7 +186,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/github_com_tojinguyen_identity_internal_dto.RefreshTokenRequest"
+                            "$ref": "#/definitions/dto.RefreshTokenRequest"
                         }
                     }
                 ],
@@ -232,7 +232,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/github_com_tojinguyen_identity_internal_dto.RegisterRequest"
+                            "$ref": "#/definitions/dto.RegisterRequest"
                         }
                     }
                 ],
@@ -283,7 +283,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/github_com_tojinguyen_identity_internal_dto.GetProfileRequest"
+                            "$ref": "#/definitions/dto.GetProfileRequest"
                         }
                     }
                 ],
@@ -311,7 +311,7 @@ const docTemplate = `{
         }
     },
     "definitions": {
-        "github_com_tojinguyen_identity_internal_dto.GetProfileRequest": {
+        "dto.GetProfileRequest": {
             "type": "object",
             "required": [
                 "user_id"
@@ -322,7 +322,7 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_tojinguyen_identity_internal_dto.LoginRequest": {
+        "dto.LoginRequest": {
             "type": "object",
             "required": [
                 "email",
@@ -337,7 +337,7 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_tojinguyen_identity_internal_dto.LogoutRequest": {
+        "dto.LogoutRequest": {
             "type": "object",
             "required": [
                 "access_token",
@@ -352,7 +352,7 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_tojinguyen_identity_internal_dto.RefreshTokenRequest": {
+        "dto.RefreshTokenRequest": {
             "type": "object",
             "required": [
                 "refresh_token"
@@ -363,7 +363,7 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_tojinguyen_identity_internal_dto.RegisterRequest": {
+        "dto.RegisterRequest": {
             "type": "object",
             "required": [
                 "email",
@@ -407,7 +407,7 @@ const docTemplate = `{
 // SwaggerInfo holds exported Swagger Info so clients can modify it
 var SwaggerInfo = &swag.Spec{
 	Version:          "1.0",
-	Host:             "localhost:8080",
+	Host:             "localhost",
 	BasePath:         "/api/v1",
 	Schemes:          []string{},
 	Title:            "Identity Service API",

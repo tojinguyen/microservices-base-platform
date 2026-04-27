@@ -2,8 +2,18 @@ grafana:
   enabled: true
   adminPassword: "admin123"
   service:
-    type: LoadBalancer
+    type: ClusterIP
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    path: /grafana
+    hosts:
+      - localhost
   grafana.ini:
+    server:
+      domain: localhost
+      root_url: "%(protocol)s://%(domain)s/grafana/"
+      serve_from_sub_path: true
     date_formats:
       default_timezone: Asia/Ho_Chi_Minh
   datasources:
@@ -23,7 +33,22 @@ promtail:
   config:
     snippets:
       pipelineStages:
-        - docker: {}
+        - cri: {}
+        # Chỉ xử lý những dòng log có định dạng JSON (bắt đầu bằng "{")
+        - match:
+            selector: '{app!=""}'
+            stages:
+              - json:
+                  expressions:
+                    level: level
+                    service: service
+              # Bỏ qua dòng không phải JSON
+              - drop:
+                  expression: '^[^{]'
+              - labels:
+                  level: ''
+                  service: ''
+
 
 loki:
   isDefault: true

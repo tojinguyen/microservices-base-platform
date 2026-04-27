@@ -27,7 +27,7 @@ import (
 // @title           Identity Service API
 // @version         1.0
 // @description     This is the API documentation for the Identity Service.
-// @host            localhost:8080
+// @host            localhost
 // @BasePath        /api/v1
 // @securityDefinitions.apikey ApiKeyAuth
 // @in header

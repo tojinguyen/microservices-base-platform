@@ -16,3 +16,6 @@ data:
   JWT_REFRESH_TOKEN_LIFESPAN: "168"
   GOOGLE_OAUTH_CLIENT_ID: "653255842498-4vst9cdn5oukr77qen519abu2aul8hql.apps.googleusercontent.com"
   GOOGLE_OAUTH_REDIRECT_URL: "http://localhost:8081/api/v1/auth/google/callback"
+  REDIS_HOST: "redis-identity-service"
+  REDIS_PORT: "6379"
+  REDIS_DB: "0"

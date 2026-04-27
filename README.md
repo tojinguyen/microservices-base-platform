@@ -48,8 +48,8 @@ notification-service (API + 3 Workers)
 ### Cách 2: Port-forward trực tiếp đến Pod
 
 ```bash
-# Identity Service
-kubectl port-forward svc/identity-service 8080:8080 -n microservices-platform
+# Identity Service (Service dùng port 8081)
+kubectl port-forward svc/identity-service 8080:8081 -n microservices-platform
 # Truy cập: http://localhost:8080/swagger/index.html
 
 # Notification Service
@@ -74,41 +74,37 @@ kubectl port-forward svc/mailpit-service 8025:8025 -n microservices-platform
 - kind
 - kubectl
 
-### Bước 1: Build Docker images
+### Bước 1: Khởi tạo Cluster với cấu hình Port
+Để đảm bảo `localhost` nhận được traffic qua Ingress, ta cần tạo cluster với cấu hình map port (đã được tích hợp sẵn trong lệnh Make):
 
 ```bash
-# Identity Service
-docker build -t identity-service:latest -f services/identity/Dockerfile .
-
-# Notification Service
-docker build -t notification-service:latest -f services/notification/Dockerfile .
+make cluster-up
 ```
 
-### Bước 2: Load images vào kind cluster
+### Bước 2: Cài đặt Nginx Ingress Controller
 
 ```bash
-kind load docker-image identity-service:latest --name desktop
-kind load docker-image notification-service:latest --name desktop
+make ingress-install
 ```
 
-### Bước 3: Cài Nginx Ingress Controller
+### Bước 3: Deploy toàn bộ hệ thống
+Lệnh này sẽ tự động build image, load vào kind cluster và apply toàn bộ YAML config:
 
 ```bash
-kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
-kubectl wait --namespace ingress-nginx --for=condition=ready pod --selector=app.kubernetes.io/component=controller --timeout=90s
+make deploy-all
 ```
 
-### Bước 4: Deploy tất cả services
+### Bước 4: Cài đặt hệ thống Monitoring (Tùy chọn)
 
 ```bash
-kubectl apply -f k8s/
+make loki-install
+make prometheus-install
 ```
 
-### Bước 5: Kiểm tra trạng thái
+### Kiểm tra trạng thái
 
 ```bash
-kubectl get pods -n microservices-platform
-kubectl get ingress -n microservices-platform
+kubectl get pods -A
 ```
 
 ---

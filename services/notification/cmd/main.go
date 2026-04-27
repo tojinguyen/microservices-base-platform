@@ -29,6 +29,7 @@ import (
 // @title Notification Service API
 // @version 1.0
 // @description This is a notification service API
+// @host localhost
 // @BasePath /api/v1/notifications
 
 func main() {

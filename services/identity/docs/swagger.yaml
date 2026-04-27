@@ -1,13 +1,13 @@
 basePath: /api/v1
 definitions:
-  github_com_tojinguyen_identity_internal_dto.GetProfileRequest:
+  dto.GetProfileRequest:
     properties:
       user_id:
         type: string
     required:
     - user_id
     type: object
-  github_com_tojinguyen_identity_internal_dto.LoginRequest:
+  dto.LoginRequest:
     properties:
       email:
         type: string
@@ -17,7 +17,7 @@ definitions:
     - email
     - password
     type: object
-  github_com_tojinguyen_identity_internal_dto.LogoutRequest:
+  dto.LogoutRequest:
     properties:
       access_token:
         type: string
@@ -27,14 +27,14 @@ definitions:
     - access_token
     - refresh_token
     type: object
-  github_com_tojinguyen_identity_internal_dto.RefreshTokenRequest:
+  dto.RefreshTokenRequest:
     properties:
       refresh_token:
         type: string
     required:
     - refresh_token
     type: object
-  github_com_tojinguyen_identity_internal_dto.RegisterRequest:
+  dto.RegisterRequest:
     properties:
       email:
         type: string
@@ -56,7 +56,7 @@ definitions:
       success:
         type: boolean
     type: object
-host: localhost:8080
+host: localhost
 info:
   contact: {}
   description: This is the API documentation for the Identity Service.
@@ -113,7 +113,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/github_com_tojinguyen_identity_internal_dto.LoginRequest'
+          $ref: '#/definitions/dto.LoginRequest'
       produces:
       - application/json
       responses:
@@ -143,7 +143,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/github_com_tojinguyen_identity_internal_dto.LogoutRequest'
+          $ref: '#/definitions/dto.LogoutRequest'
       produces:
       - application/json
       responses:
@@ -173,7 +173,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/github_com_tojinguyen_identity_internal_dto.RefreshTokenRequest'
+          $ref: '#/definitions/dto.RefreshTokenRequest'
       produces:
       - application/json
       responses:
@@ -203,7 +203,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/github_com_tojinguyen_identity_internal_dto.RegisterRequest'
+          $ref: '#/definitions/dto.RegisterRequest'
       produces:
       - application/json
       responses:
@@ -233,7 +233,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/github_com_tojinguyen_identity_internal_dto.GetProfileRequest'
+          $ref: '#/definitions/dto.GetProfileRequest'
       produces:
       - application/json
       responses:

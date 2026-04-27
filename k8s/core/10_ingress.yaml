@@ -20,7 +20,7 @@ metadata:
     # Strip prefix trước khi forward vào service
     # Ví dụ: /api/v1/auth/login → /api/v1/auth/login (giữ nguyên path)
     # Rewrite target để "gọt" bớt prefix khi gửi vào service nội bộ
-    nginx.ingress.kubernetes.io/rewrite-target: /$2
+    nginx.ingress.kubernetes.io/rewrite-target: /$1
     nginx.ingress.kubernetes.io/use-regex: "true"
     # Timeout settings
     nginx.ingress.kubernetes.io/proxy-connect-timeout: "30"
@@ -29,29 +29,30 @@ metadata:
 spec:
   ingressClassName: nginx
   rules:
-    - http:
+    - host: localhost
+      http:
         paths:
           # --- Identity Service ---
-          # API: /api/v1/auth/* -> identity:8080/api/v1/auth/*
-          - path: /(api/v1/auth(/|$)(.*))
+          # API: /api/v1/auth/* -> identity:8081/api/v1/auth/*
+          - path: /(api/v1/auth/.*)
             pathType: ImplementationSpecific
             backend:
               service:
                 name: identity-service
                 port:
-                  number: 8080
-          # Swagger: /identity/swagger/* -> identity:8080/swagger/*
-          - path: /identity/(swagger(/|$)(.*))
+                  number: 8081
+          # Swagger: /identity/swagger/* -> identity:8081/swagger/*
+          - path: /identity/(swagger/.*)
             pathType: ImplementationSpecific
             backend:
               service:
                 name: identity-service
                 port:
-                  number: 8080
+                  number: 8081
 
           # --- Notification Service ---
           # API: /api/v1/notifications/* -> notification:8082/api/v1/notifications/*
-          - path: /(api/v1/notifications(/|$)(.*))
+          - path: /(api/v1/notifications/.*)
             pathType: ImplementationSpecific
             backend:
               service:
@@ -59,7 +60,7 @@ spec:
                 port:
                   number: 8082
           # Swagger: /notification/swagger/* -> notification:8082/swagger/*
-          - path: /notification/(swagger(/|$)(.*))
+          - path: /notification/(swagger/.*)
             pathType: ImplementationSpecific
             backend:
               service:

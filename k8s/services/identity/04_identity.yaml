@@ -37,8 +37,8 @@ spec:
     spec:
       containers:
         - name: identity
-          image: identity-service:v1.0.0
-          imagePullPolicy: IfNotPresent
+          image: identity-service:latest
+          imagePullPolicy: Never
           ports:
             - containerPort: 8080
           resources:
