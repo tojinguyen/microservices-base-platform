@@ -1,4 +1,4 @@
-.PHONY: build build-identity build-notification up down logs clean migrate-add k8s-apply k8s-delete loki-install loki-uninstall
+.PHONY: build build-identity build-notification up down logs clean migrate-add k8s-apply k8s-delete loki-install loki-uninstall prometheus-install prometheus-uninstall
 
 build: build-identity build-notification
 
@@ -55,3 +55,16 @@ loki-install:
 loki-uninstall:
 	@echo "Uninstalling Loki Stack..."
 	helm uninstall loki --namespace monitoring
+
+prometheus-install:
+	@echo "Installing Prometheus (kube-prometheus-stack) via Helm..."
+	helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+	helm repo update
+	helm upgrade --install prometheus prometheus-community/kube-prometheus-stack \
+		--namespace monitoring \
+		--create-namespace \
+		-f helm-values/prometheus-values.yaml
+
+prometheus-uninstall:
+	@echo "Uninstalling Prometheus..."
+	helm uninstall prometheus --namespace monitoring

@@ -6,6 +6,17 @@ grafana:
   grafana.ini:
     date_formats:
       default_timezone: Asia/Ho_Chi_Minh
+  datasources:
+    datasources.yaml:
+      apiVersion: 1
+      datasources:
+        - name: Prometheus
+          type: prometheus
+          url: http://prometheus-kube-prometheus-prometheus.monitoring.svc.cluster.local:9090
+          access: proxy
+          isDefault: false
+          jsonData:
+            timeInterval: "15s"
 
 promtail:
   enabled: true

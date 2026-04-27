@@ -1,7 +1,7 @@
 go 1.25.0
 
 use (
-    "./pkg"
-    "./services/identity"
-    "./services/notification"
+	./pkg
+	./services/identity
+	./services/notification
 )

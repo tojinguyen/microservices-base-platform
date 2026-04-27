@@ -4,7 +4,9 @@ import (
 	"backend/pkg/auth"
 
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/tojinguyen/identity/internal/handler"
+	"github.com/tojinguyen/identity/internal/middleware"
 
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
@@ -12,7 +14,10 @@ import (
 )
 
 func RegisterRoutes(r *gin.Engine, authHandler *handler.AuthHandler, authenticator *auth.Authenticator) {
-	// Swagger Route
+	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
+
+	r.Use(middleware.PrometheusMiddleware())
+
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	v1 := r.Group("/api/v1/auth")
