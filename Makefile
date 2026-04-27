@@ -109,6 +109,8 @@ cluster-up:
 cluster-down:
 	@echo "Deleting Kind cluster..."
 	kind delete cluster --name desktop
+	@echo "Cleaning up helper containers (registry mirror, cloud provider)..."
+	docker rm -f kind-registry-mirror kind-cloud-provider || true
 
 ingress-install:
 	@echo "Installing NGINX Ingress Controller..."
