@@ -1,4 +1,4 @@
-.PHONY: build build-identity build-notification up down logs clean migrate-add k8s-apply k8s-delete
+.PHONY: build build-identity build-notification up down logs clean migrate-add k8s-apply k8s-delete loki-install loki-uninstall
 
 build: build-identity build-notification
 
@@ -42,3 +42,16 @@ k8s-apply:
 k8s-delete:
 	@echo "Deleting Kubernetes manifests recursively..."
 	kubectl delete -f k8s/ -R
+
+loki-install:
+	@echo "Installing Loki Stack via Helm..."
+	helm repo add grafana https://grafana.github.io/helm-charts
+	helm repo update
+	helm upgrade --install loki grafana/loki-stack \
+		--namespace monitoring \
+		--create-namespace \
+		-f helm-values/loki-values.yaml
+
+loki-uninstall:
+	@echo "Uninstalling Loki Stack..."
+	helm uninstall loki --namespace monitoring
