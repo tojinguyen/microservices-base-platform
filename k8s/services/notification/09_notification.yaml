@@ -59,7 +59,7 @@ spec:
         app: notification-api
     spec:
       containers:
-        - name: notification
+        - name: notification-api
           image: notification-service:latest
           imagePullPolicy: IfNotPresent
           ports:
@@ -110,7 +110,7 @@ spec:
         app: notification-worker-pending
     spec:
       containers:
-        - name: worker
+        - name: notification-worker-pending
           image: notification-service:latest
           imagePullPolicy: IfNotPresent
           resources:
@@ -147,7 +147,7 @@ spec:
         app: notification-worker-email
     spec:
       containers:
-        - name: worker
+        - name: notification-worker-email
           image: notification-service:latest
           imagePullPolicy: IfNotPresent
           resources:
@@ -184,7 +184,7 @@ spec:
         app: notification-worker-webhook
     spec:
       containers:
-        - name: worker
+        - name: notification-worker-webhook
           image: notification-service:latest
           imagePullPolicy: IfNotPresent
           resources:
