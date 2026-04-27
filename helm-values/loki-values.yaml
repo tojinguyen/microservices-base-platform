@@ -2,8 +2,7 @@ grafana:
   enabled: true
   adminPassword: "admin123"
   service:
-    type: NodePort
-    nodePort: 32000
+    type: LoadBalancer
   grafana.ini:
     date_formats:
       default_timezone: Asia/Ho_Chi_Minh
