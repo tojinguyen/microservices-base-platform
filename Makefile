@@ -1,4 +1,4 @@
-.PHONY: build build-identity build-notification up down logs clean migrate-add
+.PHONY: build build-identity build-notification up down logs clean migrate-add k8s-apply k8s-delete
 
 build: build-identity build-notification
 
@@ -34,3 +34,11 @@ logs:
 clean:
 	@echo "Cleaning up..."
 	rm -rf bin/
+
+k8s-apply:
+	@echo "Applying Kubernetes manifests recursively..."
+	kubectl apply -f k8s/ -R
+
+k8s-delete:
+	@echo "Deleting Kubernetes manifests recursively..."
+	kubectl delete -f k8s/ -R
