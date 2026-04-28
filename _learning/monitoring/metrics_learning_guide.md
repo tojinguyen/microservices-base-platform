@@ -26,25 +26,117 @@ Tài liệu này tổng hợp các kiến thức cốt lõi, công cụ cần th
 ## 3. Những Metric chủ yếu cần theo dõi
 
 ### 3.1. Infrastructure & OS (System Metrics)
-- **CPU:** Usage (%), Load Average (1m, 5m, 15m).
-- **Memory (RAM):** Available, Used, Cached, Buffers.
-- **Disk:** Disk Space Usage (%), Disk I/O (Read/Write OPS và Wait time).
-- **Network:** Bandwidth In/Out (Rx/Tx), Dropped packets, Errors.
+| Metric Name | Mô tả |
+|---|---|
+| `node_cpu_seconds_total` | Tổng thời gian CPU theo từng mode (idle, user, system, iowait) |
+| `node_load1`, `node_load5`, `node_load15` | Load Average của hệ thống theo 1, 5, 15 phút |
+| `node_memory_MemAvailable_bytes` | RAM còn trống (quan trọng nhất, khác với MemFree) |
+| `node_memory_MemTotal_bytes` | Tổng dung lượng RAM |
+| `node_memory_Cached_bytes` | RAM đang được dùng làm cache (có thể giải phóng) |
+| `node_filesystem_avail_bytes` | Dung lượng disk trống |
+| `node_filesystem_size_bytes` | Tổng dung lượng disk |
+| `node_disk_io_time_seconds_total` | Thời gian disk đang bận (I/O Utilization) |
+| `node_disk_read_bytes_total` | Tổng số byte đã đọc từ disk |
+| `node_disk_written_bytes_total` | Tổng số byte đã ghi vào disk |
+| `node_network_receive_bytes_total` | Tổng bandwidth nhận vào (Rx) |
+| `node_network_transmit_bytes_total` | Tổng bandwidth gửi đi (Tx) |
+| `node_network_receive_drop_total` | Số gói tin bị drop khi nhận |
+| `node_network_transmit_drop_total` | Số gói tin bị drop khi gửi |
 
-### 3.2. Container / Pod Metrics
-- Mức sử dụng CPU/Memory hiện tại so với cấu hình Limit và Request.
-- **Container Restarts:** Số lần bị restart (đây là một chỉ báo quan trọng của sự cố).
-- Container Network & Block I/O.
+### 3.2. Container / Pod Metrics (cAdvisor)
+| Metric Name | Mô tả |
+|---|---|
+| `container_cpu_usage_seconds_total` | Tổng CPU time container đã dùng |
+| `container_cpu_cfs_throttled_seconds_total` | Tổng thời gian container bị throttle do vượt CPU limit |
+| `container_memory_usage_bytes` | RAM container đang dùng (bao gồm cache) |
+| `container_memory_working_set_bytes` | RAM "thực sự" container đang dùng (không gồm evictable cache) — **dùng metric này để so với limit** |
+| `container_memory_cache` | Phần RAM container dùng làm page cache |
+| `container_oom_events_total` | Số lần container bị OOM Kill |
+| `container_restarts_total` | Số lần container bị restart |
+| `container_network_receive_bytes_total` | Bandwidth nhận vào của container |
+| `container_network_transmit_bytes_total` | Bandwidth gửi đi của container |
+| `container_fs_reads_bytes_total` | Số byte đọc từ filesystem |
+| `container_fs_writes_bytes_total` | Số byte ghi vào filesystem |
 
-### 3.3. Application Metrics (RED Method)
-- **HTTP/gRPC Requests:** Tổng số request vào (chia theo endpoint, method, status code).
-- **Error Rate:** Tỉ lệ số lượng request trả về lỗi (HTTP 5xx, 4xx) trên tổng số request.
-- **Latency (Duration):** Thời gian phản hồi của API (quan tâm nhiều nhất đến p50, p90, p95, p99).
-- **Business/Custom Metrics:** Tùy logic nghiệp vụ (Ví dụ: Số lượng user đăng ký mới, số đơn hàng đang xử lý, số lượng item trong queue).
+### 3.3. Kubernetes Cluster Metrics (kube-state-metrics)
+| Metric Name | Mô tả |
+|---|---|
+| `kube_pod_status_phase` | Trạng thái hiện tại của Pod (Pending, Running, Failed, Succeeded) |
+| `kube_pod_container_status_restarts_total` | Số lần restart của container trong Pod |
+| `kube_pod_container_status_ready` | Pod container đã sẵn sàng nhận traffic chưa |
+| `kube_deployment_status_replicas_available` | Số replica thực sự đang chạy và ready |
+| `kube_deployment_spec_replicas` | Số replica mong muốn theo cấu hình |
+| `kube_deployment_status_replicas_unavailable` | Số replica đang không khả dụng |
+| `kube_node_status_condition` | Trạng thái của từng Node (Ready, MemoryPressure, DiskPressure) |
+| `kube_persistentvolumeclaim_status_phase` | Trạng thái của PVC (Bound, Pending, Lost) |
+| `kube_job_failed` | Số lần Job bị thất bại |
+| `kube_cronjob_next_schedule_time` | Thời điểm CronJob sẽ chạy tiếp theo |
 
-### 3.4. Database / Cache Metrics
-- **PostgreSQL/MySQL:** Active/Idle connections, Query latency, Cache hit ratio, Deadlocks.
-- **Redis:** Memory used, Evictions, Cache hit/miss ratio, Connected clients.
+### 3.4. Application / Service Metrics (RED Method)
+| Metric Name (ví dụ) | Mô tả |
+|---|---|
+| `http_requests_total` | Tổng số HTTP request (label: `method`, `path`, `status_code`) |
+| `http_request_duration_seconds` | Histogram latency của HTTP request (dùng để tính p50, p95, p99) |
+| `http_requests_in_flight` | Số request đang được xử lý tại một thời điểm (concurrency) |
+| `grpc_server_started_total` | Tổng số gRPC call bắt đầu |
+| `grpc_server_handled_total` | Tổng số gRPC call đã xử lý xong (label: `grpc_code`) |
+| `grpc_server_handling_seconds` | Histogram latency của gRPC call |
+| `app_business_orders_created_total` | (Custom) Số đơn hàng được tạo thành công |
+| `app_business_users_registered_total` | (Custom) Số user đăng ký mới |
+| `app_business_active_sessions` | (Custom, Gauge) Số session đang hoạt động |
+
+### 3.5. Database Metrics
+| Metric Name | Mô tả |
+|---|---|
+| `go_sql_stats_open_connections` | Số connection đang mở trong pool |
+| `go_sql_stats_in_use_connections` | Số connection đang được dùng để thực hiện query |
+| `go_sql_stats_idle_connections` | Số connection đang rảnh trong pool |
+| `go_sql_stats_wait_count` | Tổng số lần request phải chờ lấy connection |
+| `go_sql_stats_wait_duration_seconds_total` | Tổng thời gian bị chờ connection |
+| `pg_stat_bgwriter_buffers_alloc_total` | *(PostgreSQL Exporter)* Số buffer được cấp phát |
+| `pg_stat_database_blks_hit` | *(PostgreSQL Exporter)* Số block được đọc từ RAM cache (cache hit) |
+| `pg_stat_database_blks_read` | *(PostgreSQL Exporter)* Số block phải đọc từ disk (cache miss) |
+| `pg_stat_database_deadlocks` | *(PostgreSQL Exporter)* Số lần xảy ra deadlock |
+| `pg_stat_database_numbackends` | *(PostgreSQL Exporter)* Số client đang kết nối |
+
+### 3.6. Cache (Redis) Metrics
+| Metric Name | Mô tả |
+|---|---|
+| `redis_memory_used_bytes` | Lượng RAM Redis đang dùng |
+| `redis_memory_max_bytes` | Giới hạn RAM của Redis (maxmemory) |
+| `redis_keyspace_hits_total` | Số lần GET key thành công (cache hit) |
+| `redis_keyspace_misses_total` | Số lần GET key thất bại (cache miss) |
+| `redis_evicted_keys_total` | Số key bị xóa do memory đầy (tăng đột biến là dấu hiệu nguy hiểm) |
+| `redis_connected_clients` | Số client đang kết nối vào Redis |
+| `redis_commands_processed_total` | Tổng số lệnh Redis đã xử lý |
+| `redis_command_duration_seconds` | Latency của các lệnh Redis |
+| `redis_expired_keys_total` | Số key đã hết TTL và bị xóa |
+
+### 3.7. Message Queue / Worker Metrics
+| Metric Name (ví dụ) | Mô tả |
+|---|---|
+| `rabbitmq_queue_messages_ready` | Số message đang chờ trong queue chưa được consume |
+| `rabbitmq_queue_messages_unacknowledged` | Số message đã deliver cho consumer nhưng chưa được ack |
+| `rabbitmq_queue_consumers` | Số consumer đang lắng nghe queue |
+| `rabbitmq_channel_messages_published_total` | Tổng số message đã publish vào queue |
+| `kafka_consumergroup_lag` | Số message consumer chưa kịp xử lý (consumer lag) |
+| `kafka_topic_partition_current_offset` | Offset hiện tại của partition |
+| `app_worker_jobs_processed_total` | (Custom) Tổng số job worker đã xử lý xong |
+| `app_worker_jobs_failed_total` | (Custom) Tổng số job worker xử lý thất bại |
+| `app_worker_job_duration_seconds` | (Custom, Histogram) Thời gian xử lý một job |
+
+### 3.8. Go Runtime Metrics
+| Metric Name | Mô tả |
+|---|---|
+| `go_goroutines` | Số goroutine đang tồn tại (tăng liên tục không giảm = goroutine leak) |
+| `go_threads` | Số OS thread đang được tạo |
+| `go_gc_duration_seconds` | Histogram thời gian mỗi lần Garbage Collection (GC) |
+| `go_memstats_alloc_bytes` | Lượng heap memory đang được cấp phát |
+| `go_memstats_heap_inuse_bytes` | Heap đang được dùng bởi object Go |
+| `go_memstats_heap_idle_bytes` | Heap đang trống và có thể trả về OS |
+| `go_memstats_sys_bytes` | Tổng memory process Go đã lấy từ OS |
+| `go_memstats_gc_cpu_fraction` | Phần trăm CPU mà GC đang tiêu tốn (nên < 5%) |
+| `go_memstats_next_gc_bytes` | Mốc heap size mà GC sẽ kích hoạt ở lần tiếp theo |
 
 ## 4. Các case Debug thực tế bằng Metric
 
