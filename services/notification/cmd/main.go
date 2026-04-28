@@ -33,7 +33,7 @@ import (
 // @BasePath /api/v1/notifications
 
 func main() {
-	if err := logger.Init("notification-service"); err != nil {
+	if err := logger.Init("notification-service", "dev"); err != nil {
 		panic(err)
 	}
 	log := logger.L()

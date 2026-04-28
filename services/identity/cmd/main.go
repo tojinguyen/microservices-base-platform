@@ -33,7 +33,7 @@ import (
 // @in header
 // @name Authorization
 func main() {
-	logger.Init("identity-service")
+	logger.Init("identity-service", "dev")
 	log := logger.L()
 
 	cfg := &identity_config.Config{}

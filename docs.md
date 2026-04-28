@@ -7,7 +7,7 @@
 
 ## Monitoring & Logging
 
-- Grafana Dashboard: [http://localhost](http://localhost)
+- Grafana Dashboard: [http://localhost/grafana](http://localhost/grafana)
   - Account: `admin`
   - Password: `admin123`
 
