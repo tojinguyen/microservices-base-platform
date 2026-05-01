@@ -21,7 +21,7 @@ import (
 )
 
 type NotificationService interface {
-	ProcessEvent(ctx context.Context, event dto.SendNotificationRequest) error
+	CreateNotification(ctx context.Context, event dto.SendNotificationRequest) error
 	SeedTemplates(ctx context.Context) error
 	UpdateStatus(ctx context.Context, notificationID string, status domain.NotificationStatus, errorMessage string, sentAt *time.Time) error
 	HandleMailpitWebhook(ctx context.Context, webhook dto.MailpitWebhook) error
@@ -44,7 +44,7 @@ func NewNotificationService(repo repository.NotificationRepository, templateRepo
 	}
 }
 
-func (s *notificationService) ProcessEvent(ctx context.Context, event dto.SendNotificationRequest) error {
+func (s *notificationService) CreateNotification(ctx context.Context, event dto.SendNotificationRequest) error {
 	tmpl, err := s.templateRepo.GetByEventType(ctx, event.EventType)
 	if err != nil {
 		logger.L().Error("Failed to get template for event type", zap.String("event_type", string(event.EventType)), zap.Error(err))

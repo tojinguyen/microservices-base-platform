@@ -50,7 +50,7 @@ func (h *NotificationHandler) SendNotification(c *gin.Context) {
 		return
 	}
 
-	if err := h.service.ProcessEvent(c.Request.Context(), req); err != nil {
+	if err := h.service.CreateNotification(c.Request.Context(), req); err != nil {
 		response.Error(c.Writer, c.Request, err)
 		return
 	}
