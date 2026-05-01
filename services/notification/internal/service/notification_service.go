@@ -10,11 +10,14 @@ import (
 	"time"
 
 	"backend/pkg/broker"
+	"backend/pkg/logger"
+
 	"github.com/google/uuid"
 	"github.com/tojinguyen/notification/internal/config"
 	"github.com/tojinguyen/notification/internal/domain"
 	"github.com/tojinguyen/notification/internal/dto"
 	"github.com/tojinguyen/notification/internal/repository"
+	"go.uber.org/zap"
 )
 
 type NotificationService interface {
@@ -44,16 +47,19 @@ func NewNotificationService(repo repository.NotificationRepository, templateRepo
 func (s *notificationService) ProcessEvent(ctx context.Context, event dto.SendNotificationRequest) error {
 	tmpl, err := s.templateRepo.GetByEventType(ctx, event.EventType)
 	if err != nil {
+		logger.L().Error("Failed to get template for event type", zap.String("event_type", string(event.EventType)), zap.Error(err))
 		return fmt.Errorf("failed to get template for event %s: %w", event.EventType, err)
 	}
 
 	title, err := s.render(tmpl.Subject, event.Payload)
 	if err != nil {
+		logger.L().Error("Failed to render title for notification", zap.String("event_type", string(event.EventType)), zap.Error(err))
 		return fmt.Errorf("failed to render title: %w", err)
 	}
 
 	content, err := s.render(tmpl.Content, event.Payload)
 	if err != nil {
+		logger.L().Error("Failed to render content for notification", zap.String("event_type", string(event.EventType)), zap.Error(err))
 		return fmt.Errorf("failed to render content: %w", err)
 	}
 
@@ -61,6 +67,7 @@ func (s *notificationService) ProcessEvent(ctx context.Context, event dto.SendNo
 	if event.Metadata != nil {
 		b, err := json.Marshal(event.Metadata)
 		if err != nil {
+			logger.L().Error("Failed to marshal metadata for notification", zap.String("event_type", string(event.EventType)), zap.Error(err))
 			return err
 		}
 		metadataStr = string(b)
