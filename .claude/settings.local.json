@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Path \"d:\\\\BACKEND\\\\PROJECTS\\\\microservices-base-platform\" -Force)",
+      "Bash(Select-Object Name, Mode)",
+      "Bash(git -C \"d:\\\\BACKEND\\\\PROJECTS\\\\microservices-base-platform\" log --oneline -20)"
+    ]
+  }
+}
