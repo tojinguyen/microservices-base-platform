@@ -37,6 +37,7 @@ type QueueConfig struct {
 }
 
 type WorkerConfig struct {
-	BatchSize int `mapstructure:"batch_size"`
-	Interval  int `mapstructure:"interval"`
+	BatchSize  int `mapstructure:"batch_size"`
+	Interval   int `mapstructure:"interval"`
+	MaxRetries int `mapstructure:"max_retries"`
 }

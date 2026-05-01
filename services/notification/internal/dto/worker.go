@@ -9,4 +9,5 @@ type NotificationTask struct {
 	Recipient      string                     `json:"recipient"`
 	Channel        domain.NotificationChannel `json:"channel"`
 	Data           map[string]string          `json:"data"`
+	RetryCount     int                        `json:"retry_count"`
 }

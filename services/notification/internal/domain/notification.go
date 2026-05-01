@@ -18,6 +18,7 @@ type Notification struct {
 
 	Status       NotificationStatus `gorm:"size:20;not null;index" json:"status"`
 	RetryCount   int                `gorm:"default:0" json:"retry_count"`
+	NextRetryAt  *time.Time         `gorm:"index" json:"next_retry_at,omitempty"`
 	ErrorMessage string             `gorm:"type:text" json:"error_message"`
 
 	Metadata string `gorm:"type:text" json:"metadata"`

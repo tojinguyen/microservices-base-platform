@@ -69,6 +69,7 @@ func (w *notificationWorker) processPendingNotifications(ctx context.Context) {
 				"subject": noti.Subject,
 				"content": noti.Content,
 			},
+			RetryCount: noti.RetryCount,
 		}
 
 		routingKey := string(noti.Channel)

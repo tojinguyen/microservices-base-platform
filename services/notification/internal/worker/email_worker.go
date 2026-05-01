@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/smtp"
+	"time"
 
 	"backend/pkg/broker"
 	"backend/pkg/logger"
@@ -63,8 +64,22 @@ func (w *EmailWorker) HandleMessage(ctx context.Context, body []byte) error {
 	notificationID, _ := uuid.Parse(task.NotificationID)
 
 	if err != nil {
-		log.Error("Failed to send email", zap.Error(err))
-		w.repo.UpdateDeliveryStatus(ctx, notificationID, domain.NotificationStatusFailed, err.Error(), nil)
+		log.Error("Failed to send email", zap.Error(err), zap.Int("retry_count", task.RetryCount))
+
+		maxRetries := w.cfg.Worker.MaxRetries
+		if maxRetries == 0 {
+			maxRetries = 3
+		}
+
+		if task.RetryCount < maxRetries {
+			delay := retryDelay(task.RetryCount)
+			nextRetryAt := time.Now().UTC().Add(delay)
+			log.Info("Scheduling retry", zap.Duration("delay", delay), zap.Int("attempt", task.RetryCount+1))
+			w.repo.IncrementRetryAndReset(ctx, notificationID, err.Error(), nextRetryAt)
+		} else {
+			log.Error("Max retries reached, marking as failed", zap.String("notification_id", task.NotificationID))
+			w.repo.UpdateDeliveryStatus(ctx, notificationID, domain.NotificationStatusFailed, err.Error(), nil)
+		}
 		return err
 	}
 
@@ -75,6 +90,18 @@ func (w *EmailWorker) HandleMessage(ctx context.Context, body []byte) error {
 
 	log.Info("Email sent successfully", zap.String("notification_id", task.NotificationID))
 	return nil
+}
+
+func retryDelay(retryCount int) time.Duration {
+	delays := []time.Duration{
+		1 * time.Minute,
+		5 * time.Minute,
+		15 * time.Minute,
+	}
+	if retryCount < len(delays) {
+		return delays[retryCount]
+	}
+	return delays[len(delays)-1]
 }
 
 func (w *EmailWorker) sendEmail(id, to, subject, body string) error {

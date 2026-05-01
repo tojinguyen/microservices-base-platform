@@ -14,6 +14,7 @@ type NotificationRepository interface {
 	ExistsByEventID(ctx context.Context, eventID string) (bool, error)
 	UpdateDeliveryStatus(ctx context.Context, notificationID uuid.UUID, status domain.NotificationStatus, errorMessage string, sentAt *time.Time) error
 	GetPending(ctx context.Context, limit int) ([]*domain.Notification, error)
+	IncrementRetryAndReset(ctx context.Context, notificationID uuid.UUID, errorMessage string, nextRetryAt time.Time) error
 }
 
 type notificationRepository struct {
@@ -66,9 +67,22 @@ func (r *notificationRepository) UpdateDeliveryStatus(ctx context.Context, notif
 func (r *notificationRepository) GetPending(ctx context.Context, limit int) ([]*domain.Notification, error) {
 	var notifications []*domain.Notification
 	err := r.db.WithContext(ctx).
-		Where("status = ?", domain.NotificationStatusPending).
+		Where("status = ? AND (next_retry_at IS NULL OR next_retry_at <= ?)", domain.NotificationStatusPending, time.Now().UTC()).
 		Order("created_at asc").
 		Limit(limit).
 		Find(&notifications).Error
 	return notifications, err
+}
+
+func (r *notificationRepository) IncrementRetryAndReset(ctx context.Context, notificationID uuid.UUID, errorMessage string, nextRetryAt time.Time) error {
+	return r.db.WithContext(ctx).
+		Model(&domain.Notification{}).
+		Where("id = ?", notificationID).
+		Updates(map[string]interface{}{
+			"status":        domain.NotificationStatusPending,
+			"retry_count":   gorm.Expr("retry_count + 1"),
+			"error_message": errorMessage,
+			"next_retry_at": nextRetryAt,
+			"updated_at":    time.Now().UTC(),
+		}).Error
 }

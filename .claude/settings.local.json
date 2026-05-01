@@ -3,7 +3,8 @@
     "allow": [
       "Bash(Get-ChildItem -Path \"d:\\\\BACKEND\\\\PROJECTS\\\\microservices-base-platform\" -Force)",
       "Bash(Select-Object Name, Mode)",
-      "Bash(git -C \"d:\\\\BACKEND\\\\PROJECTS\\\\microservices-base-platform\" log --oneline -20)"
+      "Bash(git -C \"d:\\\\BACKEND\\\\PROJECTS\\\\microservices-base-platform\" log --oneline -20)",
+      "Bash(Get-ChildItem -Path \"d:\\\\BACKEND\\\\PROJECTS\\\\microservices-base-platform\\\\services\\\\notification\\\\\" -Recurse -Force | Select-Object FullName, PSIsContainer | ConvertTo-Json -Depth 10)"
     ]
   }
 }
