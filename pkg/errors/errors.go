@@ -61,3 +61,10 @@ func NotFound(message string) *AppError {
 func InternalServer(err error) *AppError {
 	return New(http.StatusInternalServerError, "System is experiencing issues, please try again later", err)
 }
+
+func TooManyRequests(message string) *AppError {
+	if message == "" {
+		message = "Too many requests, please try again later"
+	}
+	return New(http.StatusTooManyRequests, message, nil)
+}
