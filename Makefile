@@ -1,12 +1,16 @@
+SHELL := bash
+
+# Detect existing Kind cluster at parse time
+_KIND_CLUSTERS := $(shell kind get clusters 2>/dev/null)
+
 .PHONY: build build-identity build-notification \
 	up down logs clean migrate-add \
-	k8s-apply k8s-delete \
-	deploy-identity deploy-notification deploy-all \
+	k8s-up k8s-pause k8s-destroy setup-all \
+	deploy deploy-identity deploy-notification \
+	ingress-install \
 	loki-install loki-uninstall monitoring-upgrade \
 	dashboard-apply \
-	prometheus-install prometheus-uninstall \
-	ingress-install cluster-up cluster-down \
-	setup-all
+	prometheus-install prometheus-uninstall
 
 # ==========================================
 # Docker Compose (local dev)
@@ -43,28 +47,61 @@ build-notification:
 # ==========================================
 
 migrate-add:
-	@if [ -z "$(SERVICE)" ] || [ -z "$(NAME)" ]; then \
-		echo "Usage: make migrate-add SERVICE=identity NAME=create_users_table"; \
-		exit 1; \
-	fi
+ifndef SERVICE
+	$(error Usage: make migrate-add SERVICE=identity NAME=create_users_table)
+endif
+ifndef NAME
+	$(error Usage: make migrate-add SERVICE=identity NAME=create_users_table)
+endif
 	@echo "Creating migration for $(SERVICE)..."
 	goose -dir services/$(SERVICE)/migrations create $(NAME) sql
 
 # ==========================================
-# Kubernetes Manifests
+# Kubernetes: Cluster Lifecycle
 # ==========================================
 
-k8s-apply:
-	@echo "Applying Kubernetes manifests recursively..."
-	kubectl apply -f k8s/ -R
+# Smart start: resumes existing cluster or creates + bootstraps a new one
+k8s-up:
+ifeq ($(filter desktop,$(_KIND_CLUSTERS)),desktop)
+	@echo "Cluster 'desktop' found. Resuming..."
+	-docker start desktop-control-plane desktop-worker
+	@echo "Cluster resumed."
+else
+	@echo "Creating new cluster 'desktop'..."
+	kind create cluster --name desktop --config kind-config.yaml
+	$(MAKE) setup-all
+endif
 
-k8s-delete:
-	@echo "Deleting Kubernetes manifests recursively..."
-	kubectl delete -f k8s/ -R
+# Pause cluster without deleting — containers will not auto-start when Docker Desktop opens
+k8s-pause:
+	@echo "Pausing Kind cluster..."
+	-docker stop desktop-control-plane desktop-worker
+	@echo "Cluster paused. Run 'make k8s-up' to resume."
+
+# Full teardown: delete cluster + cleanup all helper containers
+k8s-destroy:
+	@echo "Destroying Kind cluster..."
+	-kind delete cluster --name desktop
+	-docker rm -f kind-registry-mirror kind-cloud-provider
+	@echo "Cluster destroyed."
+
+# Internal: full bootstrap called by k8s-up on first cluster creation
+setup-all: ingress-install prometheus-install loki-install deploy
+	@echo "=========================================="
+	@echo " Full setup completed!"
+	@echo " Grafana:  http://localhost/grafana  (admin/admin123)"
+	@echo " Identity: http://localhost/identity/swagger/index.html"
+	@echo " Notify:   http://localhost/notification/swagger/index.html"
+	@echo "=========================================="
 
 # ==========================================
 # Deploy Services (Build → Load into Kind → Restart)
 # ==========================================
+
+deploy:
+	kubectl apply -f k8s/ -R
+	$(MAKE) deploy-identity deploy-notification
+	@echo "All services deployed successfully!"
 
 deploy-identity: build-identity
 	@echo "Loading identity-service image into kind cluster..."
@@ -82,13 +119,18 @@ deploy-notification: build-notification
 		deployment/notification-worker-webhook \
 		-n microservices-platform
 
-# Apply K8s manifests + Build & Deploy all services
-deploy-all: k8s-apply deploy-identity deploy-notification
-	@echo "All services deployed successfully!"
-
 # ==========================================
 # Helm - Monitoring Stack
 # ==========================================
+
+ingress-install:
+	@echo "Installing NGINX Ingress Controller..."
+	kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
+	@echo "Waiting for Ingress Controller to be ready..."
+	kubectl wait --namespace ingress-nginx \
+		--for=condition=ready pod \
+		--selector=app.kubernetes.io/component=controller \
+		--timeout=90s
 
 loki-install:
 	@echo "Installing Loki Stack via Helm..."
@@ -103,20 +145,19 @@ loki-uninstall:
 	@echo "Uninstalling Loki Stack..."
 	helm uninstall loki --namespace monitoring
 
-# Cập nhật cấu hình Loki/Grafana/Promtail mà không cần rebuild image
-# Dùng sau khi sửa loki-values.yaml (vd: thêm pipeline stage, dashboard provider)
+# Update Loki/Grafana/Promtail config without rebuilding — run after editing loki-values.yaml
 monitoring-upgrade:
-	@echo "Upgrading Loki Stack config (Promtail pipeline + Grafana)..."
+	@echo "Upgrading Loki Stack config..."
 	helm upgrade loki grafana/loki-stack \
 		--namespace monitoring \
 		-f helm-values/loki-values.yaml
-	@echo "Config upgraded. Grafana sẽ tự load dashboard mới sau ~30s."
+	@echo "Config upgraded. Grafana will reload dashboards after ~30s."
 
-# Áp dụng nhanh Grafana dashboard ConfigMap mà không cần upgrade toàn bộ helm
+# Apply Grafana dashboard ConfigMap without a full Helm upgrade
 dashboard-apply:
 	@echo "Applying Grafana Logs dashboard ConfigMap..."
 	kubectl apply -f k8s/monitoring/grafana-logs-dashboard.yaml
-	@echo "Dashboard applied! Truy cập: http://localhost/grafana -> Dashboards -> Microservices"
+	@echo "Dashboard applied. Go to: http://localhost/grafana -> Dashboards -> Microservices"
 
 prometheus-install:
 	@echo "Installing Prometheus (kube-prometheus-stack) via Helm..."
@@ -130,47 +171,3 @@ prometheus-install:
 prometheus-uninstall:
 	@echo "Uninstalling Prometheus..."
 	helm uninstall prometheus --namespace monitoring
-
-# ==========================================
-# Local Cluster Management (Kind)
-# ==========================================
-
-cluster-up:
-	@echo "Creating Kind cluster with ingress port mapping..."
-	kind create cluster --name desktop --config kind-config.yaml
-
-cluster-down:
-	@echo "Deleting Kind cluster..."
-	kind delete cluster --name desktop
-	@echo "Cleaning up helper containers (registry mirror, cloud provider)..."
-	docker rm -f kind-registry-mirror kind-cloud-provider || true
-
-ingress-install:
-	@echo "Installing NGINX Ingress Controller..."
-	kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
-	@echo "Waiting for Ingress Controller to be ready..."
-	kubectl wait --namespace ingress-nginx \
-		--for=condition=ready pod \
-		--selector=app.kubernetes.io/component=controller \
-		--timeout=90s
-
-# ==========================================
-# Setup All (Full bootstrap - chạy lần đầu sau cluster-up)
-# Thứ tự: Ingress → Prometheus → Loki → Deploy services
-# ==========================================
-
-setup-all: ingress-install prometheus-install loki-install deploy-all
-	@echo "=========================================="
-	@echo " Full setup completed successfully!"
-	@echo " Grafana:  http://localhost/grafana  (admin/admin123)"
-	@echo " Identity: http://localhost/identity/swagger/index.html"
-	@echo " Notify:   http://localhost/notification/swagger/index.html"
-	@echo "=========================================="
-
-# ==========================================
-# Utilities
-# ==========================================
-
-clean:
-	@echo "Cleaning up build artifacts..."
-	rm -rf bin/

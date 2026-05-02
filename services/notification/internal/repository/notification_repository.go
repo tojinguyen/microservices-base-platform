@@ -10,7 +10,7 @@ import (
 )
 
 type NotificationRepository interface {
-	Create(ctx context.Context, notification *domain.Notification) error
+	Create(ctx context.Context, notification *domain.Notification) (*domain.Notification, error)
 	ExistsByEventID(ctx context.Context, eventID string) (bool, error)
 	UpdateDeliveryStatus(ctx context.Context, notificationID uuid.UUID, status domain.NotificationStatus, errorMessage string, sentAt *time.Time) error
 	GetPending(ctx context.Context, limit int) ([]*domain.Notification, error)
@@ -25,8 +25,9 @@ func NewNotificationRepository(db *gorm.DB) NotificationRepository {
 	return &notificationRepository{db: db}
 }
 
-func (r *notificationRepository) Create(ctx context.Context, notification *domain.Notification) error {
-	return r.db.WithContext(ctx).Create(notification).Error
+func (r *notificationRepository) Create(ctx context.Context, notification *domain.Notification) (*domain.Notification, error) {
+	err := r.db.WithContext(ctx).Create(notification).Error
+	return notification, err
 }
 
 func (r *notificationRepository) ExistsByEventID(ctx context.Context, eventID string) (bool, error) {

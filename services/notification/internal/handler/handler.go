@@ -50,14 +50,13 @@ func (h *NotificationHandler) SendNotification(c *gin.Context) {
 		return
 	}
 
-	if err := h.service.CreateNotification(c.Request.Context(), req); err != nil {
+	resp, err := h.service.CreateNotification(c.Request.Context(), req)
+	if err != nil {
 		response.Error(c.Writer, c.Request, err)
 		return
 	}
 
-	response.OK(c.Writer, dto.SendNotificationResponse{
-		Message: "notification sent successfully",
-	})
+	response.OK(c.Writer, resp)
 }
 
 // HandleMailpitWebhook godoc

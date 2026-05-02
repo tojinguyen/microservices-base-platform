@@ -21,7 +21,7 @@ import (
 )
 
 type NotificationService interface {
-	CreateNotification(ctx context.Context, event dto.SendNotificationRequest) error
+	CreateNotification(ctx context.Context, event dto.SendNotificationRequest) (dto.SendNotificationResponse, error)
 	SeedTemplates(ctx context.Context) error
 	UpdateStatus(ctx context.Context, notificationID string, status domain.NotificationStatus, errorMessage string, sentAt *time.Time) error
 	HandleMailpitWebhook(ctx context.Context, webhook dto.MailpitWebhook) error
@@ -44,23 +44,23 @@ func NewNotificationService(repo repository.NotificationRepository, templateRepo
 	}
 }
 
-func (s *notificationService) CreateNotification(ctx context.Context, event dto.SendNotificationRequest) error {
+func (s *notificationService) CreateNotification(ctx context.Context, event dto.SendNotificationRequest) (dto.SendNotificationResponse, error) {
 	tmpl, err := s.templateRepo.GetByEventType(ctx, event.EventType)
 	if err != nil {
 		logger.L().Error("Failed to get template for event type", zap.String("event_type", string(event.EventType)), zap.Error(err))
-		return fmt.Errorf("failed to get template for event %s: %w", event.EventType, err)
+		return dto.SendNotificationResponse{}, fmt.Errorf("failed to get template for event %s: %w", event.EventType, err)
 	}
 
 	title, err := s.render(tmpl.Subject, event.Payload)
 	if err != nil {
 		logger.L().Error("Failed to render title for notification", zap.String("event_type", string(event.EventType)), zap.Error(err))
-		return fmt.Errorf("failed to render title: %w", err)
+		return dto.SendNotificationResponse{}, fmt.Errorf("failed to render title: %w", err)
 	}
 
 	content, err := s.render(tmpl.Content, event.Payload)
 	if err != nil {
 		logger.L().Error("Failed to render content for notification", zap.String("event_type", string(event.EventType)), zap.Error(err))
-		return fmt.Errorf("failed to render content: %w", err)
+		return dto.SendNotificationResponse{}, fmt.Errorf("failed to render content: %w", err)
 	}
 
 	var metadataStr string
@@ -68,7 +68,7 @@ func (s *notificationService) CreateNotification(ctx context.Context, event dto.
 		b, err := json.Marshal(event.Metadata)
 		if err != nil {
 			logger.L().Error("Failed to marshal metadata for notification", zap.String("event_type", string(event.EventType)), zap.Error(err))
-			return err
+			return dto.SendNotificationResponse{}, fmt.Errorf("failed to marshal metadata: %w", err)
 		}
 		metadataStr = string(b)
 	}
@@ -87,10 +87,15 @@ func (s *notificationService) CreateNotification(ctx context.Context, event dto.
 		notification.Recipient = v
 	}
 
-	if err := s.repo.Create(ctx, notification); err != nil {
-		return err
+	createdNotification, err := s.repo.Create(ctx, notification)
+	if err != nil {
+		return dto.SendNotificationResponse{}, err
 	}
-	return nil
+
+	return dto.SendNotificationResponse{
+		NotificationID: createdNotification.Id.String(),
+		Message:        "notification sent successfully",
+	}, nil
 }
 
 func (s *notificationService) UpdateStatus(ctx context.Context, notificationID string, status domain.NotificationStatus, errorMessage string, sentAt *time.Time) error {

@@ -24,6 +24,13 @@ data:
   SMTP_USERNAME: ""
   WORKER_BATCH_SIZE: "10"
   WORKER_INTERVAL: "5"
+  REDIS_HOST: "redis-notification-service"
+  REDIS_PORT: "6379"
+  REDIS_DB: "0"
+  RATE_LIMIT_GLOBAL_LIMIT: "100"
+  RATE_LIMIT_GLOBAL_WINDOW_SECS: "60"
+  RATE_LIMIT_SEND_LIMIT: "10"
+  RATE_LIMIT_SEND_WINDOW_SECS: "60"
 
 ---
 # 2. Service: Expose Notification API để các service khác gọi vào
