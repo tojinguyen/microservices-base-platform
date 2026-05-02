@@ -5,6 +5,8 @@ import (
 	"backend/pkg/config"
 	"backend/pkg/db"
 	"backend/pkg/logger"
+	"backend/pkg/ratelimit"
+	"backend/pkg/redis"
 	"context"
 	"fmt"
 	"net/http"
@@ -86,6 +88,16 @@ func runAPI(ctx context.Context, cfg *notificationConfig.Config, database *gorm.
 	}
 	defer brokerClient.Close()
 
+	redisClient, err := redis.New(cfg.Redis)
+	if err != nil {
+		log.Panic("failed to connect to redis", zap.Error(err))
+	}
+
+	limiter := ratelimit.New(redisClient, ratelimit.Config{
+		Limit:  cfg.RateLimit.GlobalLimit,
+		Window: time.Duration(cfg.RateLimit.GlobalWindowSecs) * time.Second,
+	})
+
 	notificationRepo := repository.NewNotificationRepository(database)
 	templateRepo := repository.NewTemplateRepository(database)
 	notificationService := service.NewNotificationService(notificationRepo, templateRepo, brokerClient, cfg)
@@ -100,7 +112,7 @@ func runAPI(ctx context.Context, cfg *notificationConfig.Config, database *gorm.
 	r := gin.New()
 	r.Use(gin.Recovery())
 	r.Use(logger.GinMiddleware())
-	route.RegisterRoutes(r, notificationHandler)
+	route.RegisterRoutes(r, notificationHandler, limiter, cfg.RateLimit)
 
 	srv := &http.Server{
 		Addr:    fmt.Sprintf(":%d", cfg.ServerPort),
