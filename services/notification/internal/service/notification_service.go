@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/mail"
 	"text/template"
 	"time"
 
@@ -85,6 +86,15 @@ func (s *notificationService) CreateNotification(ctx context.Context, event dto.
 
 	if v, ok := event.Payload["recipient"].(string); ok {
 		notification.Recipient = v
+	}
+
+	if tmpl.Channel == domain.ChannelEmail {
+		if notification.Recipient == "" {
+			return dto.SendNotificationResponse{}, fmt.Errorf("recipient is required for email channel")
+		}
+		if _, err := mail.ParseAddress(notification.Recipient); err != nil {
+			return dto.SendNotificationResponse{}, fmt.Errorf("invalid recipient email address %q: %w", notification.Recipient, err)
+		}
 	}
 
 	createdNotification, err := s.repo.Create(ctx, notification)

@@ -105,6 +105,10 @@ func retryDelay(retryCount int) time.Duration {
 }
 
 func (w *EmailWorker) sendEmail(id, to, subject, body string) error {
+	if to == "" {
+		return fmt.Errorf("recipient email address is empty")
+	}
+
 	smtpCfg := w.cfg.SMTP
 	auth := smtp.PlainAuth("", smtpCfg.Username, smtpCfg.Password, smtpCfg.Host)
 

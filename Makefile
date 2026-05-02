@@ -10,7 +10,8 @@ _KIND_CLUSTERS := $(shell kind get clusters 2>/dev/null)
 	ingress-install \
 	loki-install loki-uninstall monitoring-upgrade \
 	dashboard-apply \
-	prometheus-install prometheus-uninstall
+	prometheus-install prometheus-uninstall \
+	tools-deploy tools-remove
 
 # ==========================================
 # Docker Compose (local dev)
@@ -86,12 +87,14 @@ k8s-destroy:
 	@echo "Cluster destroyed."
 
 # Internal: full bootstrap called by k8s-up on first cluster creation
-setup-all: ingress-install prometheus-install loki-install deploy
+setup-all: ingress-install prometheus-install loki-install deploy tools-deploy
 	@echo "=========================================="
 	@echo " Full setup completed!"
-	@echo " Grafana:  http://localhost/grafana  (admin/admin123)"
-	@echo " Identity: http://localhost/identity/swagger/index.html"
-	@echo " Notify:   http://localhost/notification/swagger/index.html"
+	@echo " Grafana:      http://localhost/grafana  (admin/admin123)"
+	@echo " Identity:     http://localhost/identity/swagger/index.html"
+	@echo " Notify:       http://localhost/notification/swagger/index.html"
+	@echo " Adminer:      http://adminer.localhost"
+	@echo " RedisInsight: http://redisinsight.localhost"
 	@echo "=========================================="
 
 # ==========================================
@@ -171,3 +174,27 @@ prometheus-install:
 prometheus-uninstall:
 	@echo "Uninstalling Prometheus..."
 	helm uninstall prometheus --namespace monitoring
+
+# ==========================================
+# GUI Tools (Browser-based)
+# ==========================================
+
+tools-deploy:
+	@echo "Deploying GUI tools (Adminer + RedisInsight)..."
+	kubectl apply -f k8s/tools/
+	@echo "=========================================="
+	@echo " One-time setup — add to hosts file:"
+	@echo "   Windows: C:\\Windows\\System32\\drivers\\etc\\hosts"
+	@echo "   Linux/Mac: /etc/hosts"
+	@echo ""
+	@echo "   127.0.0.1 adminer.localhost"
+	@echo "   127.0.0.1 redisinsight.localhost"
+	@echo ""
+	@echo " Then open in browser:"
+	@echo "   Adminer (PostgreSQL): http://adminer.localhost"
+	@echo "   RedisInsight (Redis): http://redisinsight.localhost"
+	@echo "=========================================="
+
+tools-remove:
+	@echo "Removing GUI tools..."
+	kubectl delete -f k8s/tools/

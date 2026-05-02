@@ -66,10 +66,12 @@ cd services/notification && swag init -g cmd/main.go
 ### Kubernetes (Kind cluster)
 
 ```bash
-make cluster-up              # Create kind cluster
+make k8s-up                  # Create kind cluster (or resume existing)
+make k8s-pause               # Pause cluster without deleting
+make k8s-destroy             # Full teardown
 make ingress-install         # Install NGINX Ingress Controller
-make deploy-all              # Apply manifests + build + load + restart pods
-make setup-all               # Full bootstrap: ingress + monitoring + deploy-all
+make deploy                  # Apply manifests + build + load + restart pods
+make setup-all               # Full bootstrap: ingress + monitoring + deploy + tools
 
 make deploy-identity         # Rebuild and redeploy identity only
 make deploy-notification     # Rebuild and redeploy notification only (4 pods)
@@ -77,7 +79,12 @@ make deploy-notification     # Rebuild and redeploy notification only (4 pods)
 make prometheus-install      # kube-prometheus-stack
 make loki-install            # Loki log aggregation
 make dashboard-apply         # Grafana dashboard ConfigMap
+
+make tools-deploy            # Deploy GUI tools (Adminer + RedisInsight)
+make tools-remove            # Remove GUI tools
 ```
+
+GUI tools require a one-time hosts file entry (see [GUI Tools](#gui-tools-kubernetes) below).
 
 ## Architecture
 
@@ -89,6 +96,10 @@ Nginx Ingress (localhost:80)
   /api/v1/notifications/*     → notification-service:8082
   /identity/swagger/*         → identity-service:8080
   /notification/swagger/*     → notification-service:8082
+
+Nginx Ingress — host-based (GUI tools)
+  cloudbeaver.localhost       → cloudbeaver:8978    (PostgreSQL GUI)
+  redisinsight.localhost      → redisinsight:5540   (Redis GUI)
 ```
 
 - **Identity Service** — `services/identity/` — User registration, login, JWT (access + refresh), Google OAuth, Prometheus metrics at `/metrics`.
@@ -139,7 +150,26 @@ k8s/
     identity/     ConfigMap, Secret, PostgreSQL, Redis, Deployment
     notification/ Secret, PostgreSQL, 4 Deployments (api + 3 workers)
   monitoring/     Grafana dashboard ConfigMap
+  tools/          Adminer, RedisInsight, tools-ingress (GUI tools)
 ```
+
+### GUI Tools (Kubernetes)
+
+Browser-based tools deployed to the cluster for inspecting data without CLI.
+
+**One-time hosts file setup** (`C:\Windows\System32\drivers\etc\hosts` on Windows):
+```
+127.0.0.1 adminer.localhost
+127.0.0.1 redisinsight.localhost
+```
+
+**CloudBeaver** — `http://cloudbeaver.localhost` — web-based DBeaver (PostgreSQL GUI)
+- Identity: server `postgres-identity-service:5432` → `identity_db` / `user_admin` / `password123`
+- Notification: server `postgres-notification-service:5432` → `notification_db` / `user_admin` / `password123`
+
+**RedisInsight** — `http://redisinsight.localhost` — Redis web UI. Add connections manually:
+- Identity Redis: host `redis-identity-service`, port `6379`
+- Notification Redis: host `redis-notification-service`, port `6379`
 
 ## Coding Conventions
 

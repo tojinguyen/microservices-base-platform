@@ -11,3 +11,31 @@
   - Account: `admin`
   - Password: `admin123`
 
+## Database & Cache GUI Tools
+
+> Yêu cầu thêm vào hosts file một lần (`C:\Windows\System32\drivers\etc\hosts`):
+> ```
+> 127.0.0.1 adminer.localhost
+> 127.0.0.1 redisinsight.localhost
+> ```
+
+- **CloudBeaver** (PostgreSQL): [http://cloudbeaver.localhost](http://cloudbeaver.localhost) — web DBeaver
+
+  | | Identity DB | Notification DB |
+  |---|---|---|
+  | Host | `postgres-identity-service` | `postgres-notification-service` |
+  | Port | `5432` | `5432` |
+  | Username | `user_admin` | `user_admin` |
+  | Password | `password123` | `password123` |
+  | Database | `identity_db` | `notification_db` |
+
+- **RedisInsight** (Redis): [http://redisinsight.localhost](http://redisinsight.localhost)
+  - Identity Redis: host `redis-identity-service`, port `6379`
+  - Notification Redis: host `redis-notification-service`, port `6379`
+
+> Thêm vào hosts file một lần (`C:\Windows\System32\drivers\etc\hosts`):
+> ```
+> 127.0.0.1 cloudbeaver.localhost
+> 127.0.0.1 redisinsight.localhost
+> ```
+
