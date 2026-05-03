@@ -102,7 +102,10 @@ setup-all: ingress-install prometheus-install loki-install deploy tools-deploy
 # ==========================================
 
 deploy:
-	kubectl apply -f k8s/ -R
+	kubectl apply -f k8s/core/ -R
+	kubectl apply -f k8s/infrastructure/ -R
+	kubectl apply -f k8s/services/ -R
+	kubectl apply -f k8s/tools/ -R
 	$(MAKE) deploy-identity deploy-notification
 	@echo "All services deployed successfully!"
 
