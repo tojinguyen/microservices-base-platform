@@ -13,7 +13,7 @@ type NotificationRepository interface {
 	Create(ctx context.Context, notification *domain.Notification) (*domain.Notification, error)
 	ExistsByEventID(ctx context.Context, eventID string) (bool, error)
 	UpdateDeliveryStatus(ctx context.Context, notificationID uuid.UUID, status domain.NotificationStatus, errorMessage string, sentAt *time.Time) error
-	GetPending(ctx context.Context, limit int) ([]*domain.Notification, error)
+	ClaimPendingBatch(ctx context.Context, limit int) ([]*domain.Notification, error)
 	IncrementRetryAndReset(ctx context.Context, notificationID uuid.UUID, errorMessage string, nextRetryAt time.Time) error
 }
 
@@ -65,13 +65,36 @@ func (r *notificationRepository) UpdateDeliveryStatus(ctx context.Context, notif
 		Updates(updates).Error
 }
 
-func (r *notificationRepository) GetPending(ctx context.Context, limit int) ([]*domain.Notification, error) {
+func (r *notificationRepository) ClaimPendingBatch(ctx context.Context, limit int) ([]*domain.Notification, error) {
 	var notifications []*domain.Notification
-	err := r.db.WithContext(ctx).
-		Where("status = ? AND (next_retry_at IS NULL OR next_retry_at <= ?)", domain.NotificationStatusPending, time.Now().UTC()).
-		Order("created_at asc").
-		Limit(limit).
-		Find(&notifications).Error
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Raw(`
+			SELECT * FROM notifications
+			WHERE status = 'pending'
+			  AND (next_retry_at IS NULL OR next_retry_at <= NOW())
+			ORDER BY created_at ASC
+			LIMIT ?
+			FOR UPDATE SKIP LOCKED
+		`, limit).Scan(&notifications).Error; err != nil {
+			return err
+		}
+
+		if len(notifications) == 0 {
+			return nil
+		}
+
+		ids := make([]string, len(notifications))
+		for i, n := range notifications {
+			ids[i] = n.Id.String()
+		}
+
+		return tx.Model(&domain.Notification{}).
+			Where("id IN ?", ids).
+			Updates(map[string]interface{}{
+				"status":     domain.NotificationStatusProcessing,
+				"updated_at": time.Now().UTC(),
+			}).Error
+	})
 	return notifications, err
 }
 

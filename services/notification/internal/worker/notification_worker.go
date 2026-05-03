@@ -52,9 +52,9 @@ func (w *notificationWorker) Start(ctx context.Context) {
 
 func (w *notificationWorker) processPendingNotifications(ctx context.Context) {
 	log := logger.L()
-	notifications, err := w.repo.GetPending(ctx, w.cfg.Worker.BatchSize)
+	notifications, err := w.repo.ClaimPendingBatch(ctx, w.cfg.Worker.BatchSize)
 	if err != nil {
-		log.Error("Failed to get pending notifications", zap.Error(err))
+		log.Error("Failed to claim pending notifications", zap.Error(err))
 		return
 	}
 
@@ -73,15 +73,11 @@ func (w *notificationWorker) processPendingNotifications(ctx context.Context) {
 		}
 
 		routingKey := string(noti.Channel)
-		err := w.broker.Publish(ctx, w.cfg.Queue.Exchange, routingKey, task)
-		if err != nil {
-			log.Error("failed to publish notification", zap.String("id", noti.Id.String()), zap.Error(err))
-			continue
-		}
-
-		err = w.repo.UpdateDeliveryStatus(ctx, noti.Id, domain.NotificationStatusProcessing, "", nil)
-		if err != nil {
-			log.Error("failed to update notification status", zap.String("id", noti.Id.String()), zap.Error(err))
+		if err := w.broker.Publish(ctx, w.cfg.Queue.Exchange, routingKey, task); err != nil {
+			log.Error("failed to publish notification, resetting to pending", zap.String("id", noti.Id.String()), zap.Error(err))
+			if resetErr := w.repo.UpdateDeliveryStatus(ctx, noti.Id, domain.NotificationStatusPending, err.Error(), nil); resetErr != nil {
+				log.Error("failed to reset notification status", zap.String("id", noti.Id.String()), zap.Error(resetErr))
+			}
 		}
 	}
 }
