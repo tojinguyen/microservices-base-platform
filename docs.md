@@ -28,6 +28,8 @@
   | Username | `user_admin` | `user_admin` |
   | Password | `password123` | `password123` |
   | Database | `identity_db` | `notification_db` |
+  | Admin Username | `user_admin` | `user_admin` |
+  | Admin Password | `Toai20102002` | `Toai20102002` |
 
 - **RedisInsight** (Redis): [http://redisinsight.localhost](http://redisinsight.localhost)
   - Identity Redis: host `redis-identity-service`, port `6379`
