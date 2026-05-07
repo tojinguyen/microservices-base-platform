@@ -87,7 +87,7 @@ k8s-destroy:
 	@echo "Cluster destroyed."
 
 # Internal: full bootstrap called by k8s-up on first cluster creation
-setup-all: ingress-install prometheus-install loki-install deploy tools-deploy
+setup-all: ingress-install prometheus-install loki-install dashboard-apply deploy tools-deploy
 	@echo "=========================================="
 	@echo " Full setup completed!"
 	@echo " Grafana:      http://localhost/grafana  (admin/admin123)"
@@ -137,8 +137,8 @@ ingress-install:
 
 loki-install:
 	@echo "Installing Loki Stack via Helm..."
-	helm repo add grafana https://grafana.github.io/helm-charts
-	helm repo update
+	helm repo add grafana https://grafana.github.io/helm-charts || true
+	helm repo update grafana || echo "Warning: repo update failed, using cached charts"
 	helm upgrade --install loki grafana/loki-stack \
 		--namespace monitoring \
 		--create-namespace \
@@ -164,8 +164,8 @@ dashboard-apply:
 
 prometheus-install:
 	@echo "Installing Prometheus (kube-prometheus-stack) via Helm..."
-	helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
-	helm repo update
+	helm repo add prometheus-community https://prometheus-community.github.io/helm-charts || true
+	helm repo update prometheus-community || echo "Warning: repo update failed, using cached charts"
 	helm upgrade --install prometheus prometheus-community/kube-prometheus-stack \
 		--namespace monitoring \
 		--create-namespace \
