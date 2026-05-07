@@ -13,7 +13,7 @@ import (
 	"github.com/tojinguyen/notification/internal/handler"
 )
 
-func RegisterRoutes(r *gin.Engine, notificationHandler *handler.NotificationHandler, limiter *ratelimit.RateLimiter, rlCfg notificationConfig.RateLimitConfig) {
+func RegisterRoutes(r *gin.Engine, notificationHandler *handler.NotificationHandler, preferenceHandler *handler.PreferenceHandler, limiter *ratelimit.RateLimiter, rlCfg notificationConfig.RateLimitConfig) {
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	v1 := r.Group("/api/v1/notifications")
@@ -28,5 +28,12 @@ func RegisterRoutes(r *gin.Engine, notificationHandler *handler.NotificationHand
 			notificationHandler.SendNotification,
 		)
 		v1.POST("/webhooks/mailpit", notificationHandler.HandleMailpitWebhook)
+	}
+
+	users := r.Group("/api/v1/users")
+	users.Use(limiter.GinMiddleware(ratelimit.ByIP))
+	{
+		users.GET("/:id/notification-preferences", preferenceHandler.GetPreferences)
+		users.PUT("/:id/notification-preferences", preferenceHandler.UpsertPreferences)
 	}
 }

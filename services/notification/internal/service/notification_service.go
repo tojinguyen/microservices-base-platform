@@ -34,14 +34,16 @@ type NotificationService interface {
 type notificationService struct {
 	repo         repository.NotificationRepository
 	templateRepo repository.TemplateRepository
+	prefSvc      PreferenceService
 	broker       broker.Broker
 	cfg          *config.Config
 }
 
-func NewNotificationService(repo repository.NotificationRepository, templateRepo repository.TemplateRepository, broker broker.Broker, cfg *config.Config) NotificationService {
+func NewNotificationService(repo repository.NotificationRepository, templateRepo repository.TemplateRepository, prefSvc PreferenceService, broker broker.Broker, cfg *config.Config) NotificationService {
 	return &notificationService{
 		repo:         repo,
 		templateRepo: templateRepo,
+		prefSvc:      prefSvc,
 		broker:       broker,
 		cfg:          cfg,
 	}
@@ -52,6 +54,19 @@ func (s *notificationService) CreateNotification(ctx context.Context, event dto.
 	if err != nil {
 		logger.L().Error("Failed to get template for event type", zap.String("event_type", string(event.EventType)), zap.Error(err))
 		return dto.SendNotificationResponse{}, fmt.Errorf("failed to get template for event %s: %w", event.EventType, err)
+	}
+
+	if s.prefSvc != nil {
+		enabled, err := s.prefSvc.IsNotificationEnabled(ctx, event.UserID, tmpl.EventType, tmpl.Channel)
+		if err != nil {
+			logger.L().Warn("preference check failed, delivering anyway",
+				zap.String("user_id", event.UserID),
+				zap.String("event_type", string(event.EventType)),
+				zap.Error(err),
+			)
+		} else if !enabled {
+			return dto.SendNotificationResponse{Message: "notification skipped - user opted out"}, nil
+		}
 	}
 
 	title, err := s.render(tmpl.Subject, event.Payload)

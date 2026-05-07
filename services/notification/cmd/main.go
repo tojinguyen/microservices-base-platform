@@ -93,6 +93,8 @@ func runAPI(ctx context.Context, cfg *notificationConfig.Config, database *gorm.
 		log.Panic("failed to connect to redis", zap.Error(err))
 	}
 
+	cache := redis.NewCache(redisClient)
+
 	limiter := ratelimit.New(redisClient, ratelimit.Config{
 		Limit:  cfg.RateLimit.GlobalLimit,
 		Window: time.Duration(cfg.RateLimit.GlobalWindowSecs) * time.Second,
@@ -100,19 +102,22 @@ func runAPI(ctx context.Context, cfg *notificationConfig.Config, database *gorm.
 
 	notificationRepo := repository.NewNotificationRepository(database)
 	templateRepo := repository.NewTemplateRepository(database)
-	notificationService := service.NewNotificationService(notificationRepo, templateRepo, brokerClient, cfg)
+	prefRepo := repository.NewPreferenceRepository(database)
+	prefSvc := service.NewPreferenceService(prefRepo, cache)
+	notificationService := service.NewNotificationService(notificationRepo, templateRepo, prefSvc, brokerClient, cfg)
 
 	if err := notificationService.SeedTemplates(context.Background()); err != nil {
 		log.Error("failed to seed notification templates", zap.Error(err))
 	}
 
 	notificationHandler := handler.NewNotificationHandler(notificationService)
+	preferenceHandler := handler.NewPreferenceHandler(prefSvc)
 
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
 	r.Use(gin.Recovery())
 	r.Use(logger.GinMiddleware())
-	route.RegisterRoutes(r, notificationHandler, limiter, cfg.RateLimit)
+	route.RegisterRoutes(r, notificationHandler, preferenceHandler, limiter, cfg.RateLimit)
 
 	srv := &http.Server{
 		Addr:    fmt.Sprintf(":%d", cfg.ServerPort),
@@ -176,7 +181,7 @@ func runWebhookWorker(ctx context.Context, cfg *notificationConfig.Config, datab
 
 	notificationRepo := repository.NewNotificationRepository(database)
 	templateRepo := repository.NewTemplateRepository(database)
-	notificationService := service.NewNotificationService(notificationRepo, templateRepo, brokerClient, cfg)
+	notificationService := service.NewNotificationService(notificationRepo, templateRepo, nil, brokerClient, cfg)
 
 	webhookWorker := worker.NewWebhookWorker(notificationService, brokerClient, cfg)
 

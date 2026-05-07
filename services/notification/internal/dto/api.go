@@ -52,3 +52,32 @@ type ListNotificationsResponse struct {
 	NextCursor string             `json:"next_cursor,omitempty"`
 	HasMore    bool               `json:"has_more"`
 }
+
+type PreferenceItem struct {
+	ID        string                     `json:"id"`
+	EventType domain.EventType           `json:"event_type"`
+	Channel   domain.NotificationChannel `json:"channel"`
+	Enabled   bool                       `json:"enabled"`
+	UpdatedAt time.Time                  `json:"updated_at"`
+}
+
+type GetPreferencesResponse struct {
+	UserID      string           `json:"user_id"`
+	Preferences []PreferenceItem `json:"preferences"`
+}
+
+type UpsertPreferenceItem struct {
+	EventType domain.EventType           `json:"event_type" binding:"required"`
+	Channel   domain.NotificationChannel `json:"channel"    binding:"required"`
+	Enabled   bool                       `json:"enabled"`
+}
+
+type UpsertPreferencesRequest struct {
+	Preferences []UpsertPreferenceItem `json:"preferences" binding:"required,min=1"`
+}
+
+type UpsertPreferencesResponse struct {
+	UserID      string           `json:"user_id"`
+	Preferences []PreferenceItem `json:"preferences"`
+	Message     string           `json:"message"`
+}

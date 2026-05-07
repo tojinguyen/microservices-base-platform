@@ -8,7 +8,9 @@
       "Bash(Get-ChildItem -Path \"d:\\\\BACKEND\\\\PROJECTS\\\\microservices-base-platform\\\\services\\\\notification\" -Recurse -Force)",
       "Bash(Get-ChildItem -Path \"d:\\\\BACKEND\\\\PROJECTS\\\\microservices-base-platform\\\\services\\\\notification\" -Recurse)",
       "Bash(ConvertTo-Csv -NoTypeInformation)",
-      "Bash(Select-Object -Skip 1)"
+      "Bash(Select-Object -Skip 1)",
+      "Bash(Head -100)",
+      "Bash(Get-ChildItem -Path \"d:\\\\BACKEND\\\\PROJECTS\\\\microservices-base-platform\" -Directory)"
     ]
   }
 }

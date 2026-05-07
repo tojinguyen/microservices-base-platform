@@ -120,3 +120,71 @@ func (h *NotificationHandler) HandleMailpitWebhook(c *gin.Context) {
 
 	response.OK(c.Writer, "webhook accepted for processing")
 }
+
+type PreferenceHandler struct {
+	prefSvc service.PreferenceService
+}
+
+func NewPreferenceHandler(prefSvc service.PreferenceService) *PreferenceHandler {
+	return &PreferenceHandler{prefSvc: prefSvc}
+}
+
+// GetPreferences godoc
+// @Summary Get user notification preferences
+// @Description Returns toggleable notification preferences for a specific user
+// @Tags preferences
+// @Produce json
+// @Param id path string true "User ID"
+// @Success 200 {object} response.StandardResponse{data=dto.GetPreferencesResponse}
+// @Failure 400 {object} response.StandardResponse{error=object{code=int,message=string}}
+// @Failure 500 {object} response.StandardResponse{error=object{code=int,message=string}}
+// @Router /api/v1/users/{id}/notification-preferences [get]
+func (h *PreferenceHandler) GetPreferences(c *gin.Context) {
+	userID := c.Param("id")
+	if userID == "" {
+		response.Error(c.Writer, c.Request, errors.New("user id is required"))
+		return
+	}
+
+	resp, err := h.prefSvc.GetPreferences(c.Request.Context(), userID)
+	if err != nil {
+		response.Error(c.Writer, c.Request, err)
+		return
+	}
+
+	response.OK(c.Writer, resp)
+}
+
+// UpsertPreferences godoc
+// @Summary Update user notification preferences
+// @Description Upserts notification preferences for a user. Only promotion_campaign event is configurable.
+// @Tags preferences
+// @Accept json
+// @Produce json
+// @Param id   path string                        true "User ID"
+// @Param body body dto.UpsertPreferencesRequest  true "Preferences payload"
+// @Success 200 {object} response.StandardResponse{data=dto.UpsertPreferencesResponse}
+// @Failure 400 {object} response.StandardResponse{error=object{code=int,message=string}}
+// @Failure 500 {object} response.StandardResponse{error=object{code=int,message=string}}
+// @Router /api/v1/users/{id}/notification-preferences [put]
+func (h *PreferenceHandler) UpsertPreferences(c *gin.Context) {
+	userID := c.Param("id")
+	if userID == "" {
+		response.Error(c.Writer, c.Request, errors.New("user id is required"))
+		return
+	}
+
+	var req dto.UpsertPreferencesRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c.Writer, c.Request, err)
+		return
+	}
+
+	resp, err := h.prefSvc.UpsertPreferences(c.Request.Context(), userID, req)
+	if err != nil {
+		response.Error(c.Writer, c.Request, err)
+		return
+	}
+
+	response.OK(c.Writer, resp)
+}
