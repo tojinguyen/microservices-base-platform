@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"errors"
+
 	"backend/pkg/response"
 
 	"github.com/gin-gonic/gin"
@@ -51,6 +53,43 @@ func (h *NotificationHandler) SendNotification(c *gin.Context) {
 	}
 
 	resp, err := h.service.CreateNotification(c.Request.Context(), req)
+	if err != nil {
+		response.Error(c.Writer, c.Request, err)
+		return
+	}
+
+	response.OK(c.Writer, resp)
+}
+
+// ListNotifications godoc
+// @Summary List notification history
+// @Description Returns paginated notification history for a user using cursor-based pagination
+// @Tags notifications
+// @Produce json
+// @Param user_id    query string false "User ID (required)"
+// @Param status     query string false "Filter by status (pending|processing|sent|delivering|failed)"
+// @Param channel    query string false "Filter by channel (email|sms|zalo|push)"
+// @Param event_type query string false "Filter by event type"
+// @Param from       query string false "Start time RFC3339 (e.g. 2026-01-01T00:00:00Z)"
+// @Param to         query string false "End time RFC3339"
+// @Param cursor     query string false "Opaque pagination cursor from previous response"
+// @Param limit      query int    false "Page size (default 20, max 100)"
+// @Success 200 {object} response.StandardResponse{data=dto.ListNotificationsResponse}
+// @Failure 400 {object} response.StandardResponse{error=object{code=int,message=string}}
+// @Failure 500 {object} response.StandardResponse{error=object{code=int,message=string}}
+// @Router / [get]
+func (h *NotificationHandler) ListNotifications(c *gin.Context) {
+	var req dto.ListNotificationsRequest
+	if err := c.ShouldBindQuery(&req); err != nil {
+		response.Error(c.Writer, c.Request, err)
+		return
+	}
+	if req.UserID == "" {
+		response.Error(c.Writer, c.Request, errors.New("user_id is required"))
+		return
+	}
+
+	resp, err := h.service.ListNotifications(c.Request.Context(), req)
 	if err != nil {
 		response.Error(c.Writer, c.Request, err)
 		return

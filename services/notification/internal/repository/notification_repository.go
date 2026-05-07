@@ -9,12 +9,31 @@ import (
 	"gorm.io/gorm"
 )
 
+// NotificationFilter holds all optional filters for List queries.
+type NotificationFilter struct {
+	UserID    string
+	Status    domain.NotificationStatus
+	Channel   domain.NotificationChannel
+	EventType domain.EventType
+	From      *time.Time
+	To        *time.Time
+	Cursor    *RepoCursor
+	Limit     int
+}
+
+// RepoCursor encodes the position of the last seen item for cursor pagination.
+type RepoCursor struct {
+	CreatedAt time.Time
+	ID        uuid.UUID
+}
+
 type NotificationRepository interface {
 	Create(ctx context.Context, notification *domain.Notification) (*domain.Notification, error)
 	ExistsByEventID(ctx context.Context, eventID string) (bool, error)
 	UpdateDeliveryStatus(ctx context.Context, notificationID uuid.UUID, status domain.NotificationStatus, errorMessage string, sentAt *time.Time) error
 	ClaimPendingBatch(ctx context.Context, limit int) ([]*domain.Notification, error)
 	IncrementRetryAndReset(ctx context.Context, notificationID uuid.UUID, errorMessage string, nextRetryAt time.Time) error
+	List(ctx context.Context, filter NotificationFilter) ([]*domain.Notification, error)
 }
 
 type notificationRepository struct {
@@ -109,4 +128,32 @@ func (r *notificationRepository) IncrementRetryAndReset(ctx context.Context, not
 			"next_retry_at": nextRetryAt,
 			"updated_at":    time.Now().UTC(),
 		}).Error
+}
+
+func (r *notificationRepository) List(ctx context.Context, filter NotificationFilter) ([]*domain.Notification, error) {
+	db := r.db.WithContext(ctx).Model(&domain.Notification{}).
+		Where("user_id = ?", filter.UserID)
+
+	if filter.Status != "" {
+		db = db.Where("status = ?", filter.Status)
+	}
+	if filter.Channel != "" {
+		db = db.Where("channel = ?", filter.Channel)
+	}
+	if filter.EventType != "" {
+		db = db.Where("event_type = ?", filter.EventType)
+	}
+	if filter.From != nil {
+		db = db.Where("created_at >= ?", filter.From)
+	}
+	if filter.To != nil {
+		db = db.Where("created_at <= ?", filter.To)
+	}
+	if filter.Cursor != nil {
+		db = db.Where("(created_at, id) < (?, ?)", filter.Cursor.CreatedAt, filter.Cursor.ID)
+	}
+
+	var results []*domain.Notification
+	err := db.Order("created_at DESC, id DESC").Limit(filter.Limit).Find(&results).Error
+	return results, err
 }

@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Path \"d:\\\\BACKEND\\\\PROJECTS\\\\microservices-base-platform\\\\services\\\\identity\" -Recurse -File)",
+      "Bash(Get-ChildItem -Path \"d:\\\\BACKEND\\\\PROJECTS\\\\microservices-base-platform\\\\services\\\\notification\" -Recurse -Directory)",
+      "Bash(Select-Object FullName)",
+      "Bash(Select-Object Name, FullName)",
+      "Bash(Get-ChildItem -Path \"d:\\\\BACKEND\\\\PROJECTS\\\\microservices-base-platform\\\\services\\\\notification\" -Recurse -Force)",
+      "Bash(Get-ChildItem -Path \"d:\\\\BACKEND\\\\PROJECTS\\\\microservices-base-platform\\\\services\\\\notification\" -Recurse)",
+      "Bash(ConvertTo-Csv -NoTypeInformation)",
+      "Bash(Select-Object -Skip 1)"
+    ]
+  }
+}

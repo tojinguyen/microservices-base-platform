@@ -19,6 +19,7 @@ func RegisterRoutes(r *gin.Engine, notificationHandler *handler.NotificationHand
 	v1 := r.Group("/api/v1/notifications")
 	v1.Use(limiter.GinMiddleware(ratelimit.ByIP))
 	{
+		v1.GET("", notificationHandler.ListNotifications)
 		v1.GET("/health", notificationHandler.Health)
 		v1.POST("/send",
 			limiter.GinMiddlewareWithConfig(func(c *gin.Context) string {

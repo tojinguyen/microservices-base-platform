@@ -3,6 +3,7 @@ package service
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -27,6 +28,7 @@ type NotificationService interface {
 	UpdateStatus(ctx context.Context, notificationID string, status domain.NotificationStatus, errorMessage string, sentAt *time.Time) error
 	HandleMailpitWebhook(ctx context.Context, webhook dto.MailpitWebhook) error
 	PublishWebhookResponse(ctx context.Context, webhook dto.MailpitWebhook) error
+	ListNotifications(ctx context.Context, req dto.ListNotificationsRequest) (dto.ListNotificationsResponse, error)
 }
 
 type notificationService struct {
@@ -151,6 +153,109 @@ func (s *notificationService) HandleMailpitWebhook(ctx context.Context, webhook 
 
 func (s *notificationService) PublishWebhookResponse(ctx context.Context, webhook dto.MailpitWebhook) error {
 	return s.broker.Publish(ctx, s.cfg.Queue.Exchange, s.cfg.Queue.WebhookMailpit, webhook)
+}
+
+type cursorPayload struct {
+	CreatedAt time.Time `json:"c"`
+	ID        string    `json:"i"`
+}
+
+func encodeCursor(createdAt time.Time, id string) string {
+	b, _ := json.Marshal(cursorPayload{CreatedAt: createdAt, ID: id})
+	return base64.URLEncoding.EncodeToString(b)
+}
+
+func decodeCursor(s string) (*cursorPayload, error) {
+	b, err := base64.URLEncoding.DecodeString(s)
+	if err != nil {
+		return nil, err
+	}
+	var p cursorPayload
+	if err := json.Unmarshal(b, &p); err != nil {
+		return nil, err
+	}
+	return &p, nil
+}
+
+func (s *notificationService) ListNotifications(ctx context.Context, req dto.ListNotificationsRequest) (dto.ListNotificationsResponse, error) {
+	if req.Limit <= 0 {
+		req.Limit = 20
+	}
+	if req.Limit > 100 {
+		req.Limit = 100
+	}
+
+	filter := repository.NotificationFilter{
+		UserID:    req.UserID,
+		Status:    req.Status,
+		Channel:   req.Channel,
+		EventType: req.EventType,
+		Limit:     req.Limit + 1,
+	}
+
+	if req.From != "" {
+		t, err := time.Parse(time.RFC3339, req.From)
+		if err != nil {
+			return dto.ListNotificationsResponse{}, fmt.Errorf("invalid from: %w", err)
+		}
+		filter.From = &t
+	}
+	if req.To != "" {
+		t, err := time.Parse(time.RFC3339, req.To)
+		if err != nil {
+			return dto.ListNotificationsResponse{}, fmt.Errorf("invalid to: %w", err)
+		}
+		filter.To = &t
+	}
+	if req.Cursor != "" {
+		p, err := decodeCursor(req.Cursor)
+		if err != nil {
+			return dto.ListNotificationsResponse{}, fmt.Errorf("invalid cursor: %w", err)
+		}
+		id, err := uuid.Parse(p.ID)
+		if err != nil {
+			return dto.ListNotificationsResponse{}, fmt.Errorf("invalid cursor id: %w", err)
+		}
+		filter.Cursor = &repository.RepoCursor{CreatedAt: p.CreatedAt, ID: id}
+	}
+
+	rows, err := s.repo.List(ctx, filter)
+	if err != nil {
+		return dto.ListNotificationsResponse{}, err
+	}
+
+	hasMore := len(rows) > req.Limit
+	if hasMore {
+		rows = rows[:req.Limit]
+	}
+
+	items := make([]dto.NotificationItem, len(rows))
+	for i, n := range rows {
+		items[i] = dto.NotificationItem{
+			ID:           n.Id.String(),
+			EventType:    n.EventType,
+			Channel:      n.Channel,
+			Status:       n.Status,
+			Subject:      n.Subject,
+			Recipient:    n.Recipient,
+			RetryCount:   n.RetryCount,
+			ErrorMessage: n.ErrorMessage,
+			SentAt:       n.SentAt,
+			CreatedAt:    n.CreatedAt,
+		}
+	}
+
+	var nextCursor string
+	if hasMore && len(rows) > 0 {
+		last := rows[len(rows)-1]
+		nextCursor = encodeCursor(last.CreatedAt, last.Id.String())
+	}
+
+	return dto.ListNotificationsResponse{
+		Items:      items,
+		NextCursor: nextCursor,
+		HasMore:    hasMore,
+	}, nil
 }
 
 func (s *notificationService) render(tmplStr string, data interface{}) (string, error) {
