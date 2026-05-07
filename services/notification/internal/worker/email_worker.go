@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/smtp"
 	"time"
@@ -19,9 +20,10 @@ import (
 )
 
 type EmailWorker struct {
-	repo   repository.NotificationRepository
-	broker broker.Broker
-	cfg    *config.Config
+	repo           repository.NotificationRepository
+	broker         broker.Broker
+	cfg            *config.Config
+	circuitBreaker *CircuitBreaker
 }
 
 func NewEmailWorker(repo repository.NotificationRepository, broker broker.Broker, cfg *config.Config) *EmailWorker {
@@ -29,6 +31,10 @@ func NewEmailWorker(repo repository.NotificationRepository, broker broker.Broker
 		repo:   repo,
 		broker: broker,
 		cfg:    cfg,
+		circuitBreaker: NewCircuitBreaker(
+			cfg.Worker.CircuitBreakerMaxFailures,
+			cfg.Worker.CircuitBreakerOpenDuration,
+		),
 	}
 }
 
@@ -61,15 +67,17 @@ func (w *EmailWorker) HandleMessage(ctx context.Context, body []byte) error {
 
 	err := w.sendEmail(task.NotificationID, task.Recipient, task.Data["subject"], task.Data["content"])
 
+	if errors.Is(err, ErrCircuitBreakerOpen) {
+		log.Warn("Circuit breaker is open, skipping email send", zap.String("notification_id", task.NotificationID))
+		return err
+	}
+
 	notificationID, _ := uuid.Parse(task.NotificationID)
 
 	if err != nil {
 		log.Error("Failed to send email", zap.Error(err), zap.Int("retry_count", task.RetryCount))
 
 		maxRetries := w.cfg.Worker.MaxRetries
-		if maxRetries == 0 {
-			maxRetries = 3
-		}
 
 		if task.RetryCount < maxRetries {
 			delay := retryDelay(task.RetryCount)
@@ -109,20 +117,22 @@ func (w *EmailWorker) sendEmail(id, to, subject, body string) error {
 		return fmt.Errorf("recipient email address is empty")
 	}
 
-	smtpCfg := w.cfg.SMTP
-	auth := smtp.PlainAuth("", smtpCfg.Username, smtpCfg.Password, smtpCfg.Host)
+	return w.circuitBreaker.Execute(func() error {
+		smtpCfg := w.cfg.SMTP
+		auth := smtp.PlainAuth("", smtpCfg.Username, smtpCfg.Password, smtpCfg.Host)
 
-	msg := []byte(fmt.Sprintf("To: %s\r\n"+
-		"Subject: %s\r\n"+
-		"X-Notification-ID: %s\r\n"+
-		"\r\n"+
-		"%s\r\n", to, subject, id, body))
+		msg := []byte(fmt.Sprintf("To: %s\r\n"+
+			"Subject: %s\r\n"+
+			"X-Notification-ID: %s\r\n"+
+			"\r\n"+
+			"%s\r\n", to, subject, id, body))
 
-	addr := fmt.Sprintf("%s:%d", smtpCfg.Host, smtpCfg.Port)
+		addr := fmt.Sprintf("%s:%d", smtpCfg.Host, smtpCfg.Port)
 
-	if smtpCfg.Username == "" {
-		return smtp.SendMail(addr, nil, smtpCfg.From, []string{to}, msg)
-	}
+		if smtpCfg.Username == "" {
+			return smtp.SendMail(addr, nil, smtpCfg.From, []string{to}, msg)
+		}
 
-	return smtp.SendMail(addr, auth, smtpCfg.From, []string{to}, msg)
+		return smtp.SendMail(addr, auth, smtpCfg.From, []string{to}, msg)
+	})
 }

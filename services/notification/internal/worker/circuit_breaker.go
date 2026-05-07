@@ -66,7 +66,7 @@ func (cb *CircuitBreaker) Execute(operation func() error) error {
 				cb.state = CircuitBreakerStateOpen
 				cb.lastFailureTime = time.Now()
 			}
-			return nil
+			return err
 		}
 		cb.failureCount = 0
 		return nil
