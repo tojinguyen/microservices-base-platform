@@ -133,10 +133,7 @@ ingress-install:
 	@echo "Installing NGINX Ingress Controller..."
 	kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
 	@echo "Waiting for Ingress Controller to be ready..."
-	kubectl wait --namespace ingress-nginx \
-		--for=condition=ready pod \
-		--selector=app.kubernetes.io/component=controller \
-		--timeout=90s
+	kubectl rollout status deployment/ingress-nginx-controller -n ingress-nginx --timeout=180s
 
 loki-install:
 	@echo "Installing Loki Stack via Helm..."
