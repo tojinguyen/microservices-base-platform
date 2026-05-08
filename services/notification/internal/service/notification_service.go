@@ -24,6 +24,7 @@ import (
 
 type NotificationService interface {
 	CreateNotification(ctx context.Context, event dto.SendNotificationRequest) (dto.SendNotificationResponse, error)
+	CreateNotificationWithTemplate(ctx context.Context, event dto.SendNotificationRequest, tmpl *domain.NotificationTemplate) (dto.SendNotificationResponse, error)
 	ScheduleNotification(ctx context.Context, req dto.ScheduleNotificationRequest) (dto.ScheduleNotificationResponse, error)
 	SeedTemplates(ctx context.Context) error
 	UpdateStatus(ctx context.Context, notificationID string, status domain.NotificationStatus, errorMessage string, sentAt *time.Time) error
@@ -56,7 +57,14 @@ func (s *notificationService) CreateNotification(ctx context.Context, event dto.
 		logger.L().Error("Failed to get template for event type", zap.String("event_type", string(event.EventType)), zap.Error(err))
 		return dto.SendNotificationResponse{}, fmt.Errorf("failed to get template for event %s: %w", event.EventType, err)
 	}
+	return s.createFromTemplate(ctx, event, tmpl)
+}
 
+func (s *notificationService) CreateNotificationWithTemplate(ctx context.Context, event dto.SendNotificationRequest, tmpl *domain.NotificationTemplate) (dto.SendNotificationResponse, error) {
+	return s.createFromTemplate(ctx, event, tmpl)
+}
+
+func (s *notificationService) createFromTemplate(ctx context.Context, event dto.SendNotificationRequest, tmpl *domain.NotificationTemplate) (dto.SendNotificationResponse, error) {
 	if s.prefSvc != nil {
 		enabled, err := s.prefSvc.IsNotificationEnabled(ctx, event.UserID, tmpl.EventType, tmpl.Channel)
 		if err != nil {

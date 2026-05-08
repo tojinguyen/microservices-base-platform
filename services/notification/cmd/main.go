@@ -113,7 +113,7 @@ func runAPI(ctx context.Context, cfg *notificationConfig.Config, database *gorm.
 	}
 
 	scheduleRepo := repository.NewScheduleRepository(database)
-	schedulerSvc := service.NewSchedulerService(scheduleRepo, notificationService)
+	schedulerSvc := service.NewSchedulerService(scheduleRepo, templateRepo, notificationService)
 
 	notificationHandler := handler.NewNotificationHandler(notificationService)
 	preferenceHandler := handler.NewPreferenceHandler(prefSvc)
@@ -184,7 +184,7 @@ func runSchedulerWorker(ctx context.Context, cfg *notificationConfig.Config, dat
 	templateRepo := repository.NewTemplateRepository(database)
 	scheduleRepo := repository.NewScheduleRepository(database)
 	notificationSvc := service.NewNotificationService(notificationRepo, templateRepo, nil, nil, cfg)
-	schedulerSvc := service.NewSchedulerService(scheduleRepo, notificationSvc)
+	schedulerSvc := service.NewSchedulerService(scheduleRepo, templateRepo, notificationSvc)
 
 	schedulerWorker := worker.NewSchedulerWorker(schedulerSvc)
 

@@ -25,12 +25,14 @@ type SchedulerService interface {
 
 type schedulerService struct {
 	scheduleRepo    repository.ScheduleRepository
+	templateRepo    repository.TemplateRepository
 	notificationSvc NotificationService
 }
 
-func NewSchedulerService(scheduleRepo repository.ScheduleRepository, notificationSvc NotificationService) SchedulerService {
+func NewSchedulerService(scheduleRepo repository.ScheduleRepository, templateRepo repository.TemplateRepository, notificationSvc NotificationService) SchedulerService {
 	return &schedulerService{
 		scheduleRepo:    scheduleRepo,
+		templateRepo:    templateRepo,
 		notificationSvc: notificationSvc,
 	}
 }
@@ -44,8 +46,36 @@ func (s *schedulerService) ProcessDueSchedules(ctx context.Context) error {
 	log := logger.L()
 	now := time.Now().UTC()
 
+	// Pre-fetch one template per unique event_type found in this batch.
+	// Without this, N users with the same event_type would hit the DB N times.
+	templateCache := make(map[domain.EventType]*domain.NotificationTemplate)
+	for _, sc := range candidates {
+		if _, ok := templateCache[sc.EventType]; ok {
+			continue
+		}
+		tmpl, err := s.templateRepo.GetByEventType(ctx, sc.EventType)
+		if err != nil {
+			log.Warn("template not found, skipping event_type",
+				zap.String("event_type", string(sc.EventType)),
+				zap.Error(err),
+			)
+			templateCache[sc.EventType] = nil // mark as missing so we don't retry
+			continue
+		}
+		templateCache[sc.EventType] = tmpl
+	}
+
 	for _, schedule := range candidates {
 		if !isDue(schedule, now) {
+			continue
+		}
+
+		tmpl := templateCache[schedule.EventType]
+		if tmpl == nil {
+			log.Warn("skipping schedule due to missing template",
+				zap.String("schedule_id", schedule.Id.String()),
+				zap.String("event_type", string(schedule.EventType)),
+			)
 			continue
 		}
 
@@ -59,11 +89,11 @@ func (s *schedulerService) ProcessDueSchedules(ctx context.Context) error {
 			}
 		}
 
-		_, err := s.notificationSvc.CreateNotification(ctx, dto.SendNotificationRequest{
+		_, err := s.notificationSvc.CreateNotificationWithTemplate(ctx, dto.SendNotificationRequest{
 			UserID:    schedule.UserID,
 			EventType: schedule.EventType,
 			Payload:   payload,
-		})
+		}, tmpl)
 		if err != nil {
 			log.Error("failed to create notification for schedule",
 				zap.String("schedule_id", schedule.Id.String()),
@@ -199,12 +229,12 @@ func validateSendTime(t string) error {
 
 func toScheduleItem(s *domain.UserNotificationSchedule) dto.ScheduleItem {
 	return dto.ScheduleItem{
-		ID:          s.Id.String(),
-		EventType:   s.EventType,
-		SendTime:    s.SendTime,
-		Timezone:    s.Timezone,
-		Enabled:     s.Enabled,
-		LastSentAt:  s.LastSentAt,
-		CreatedAt:   s.CreatedAt,
+		ID:         s.Id.String(),
+		EventType:  s.EventType,
+		SendTime:   s.SendTime,
+		Timezone:   s.Timezone,
+		Enabled:    s.Enabled,
+		LastSentAt: s.LastSentAt,
+		CreatedAt:  s.CreatedAt,
 	}
 }
