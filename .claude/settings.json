@@ -13,7 +13,8 @@
       "Bash(Get-ChildItem -Path \"d:\\\\BACKEND\\\\PROJECTS\\\\microservices-base-platform\" -Directory)",
       "Bash(Get-ChildItem -Path \"d:\\\\BACKEND\\\\PROJECTS\\\\microservices-base-platform\\\\services\\\\notification\\\\\" -Recurse -Directory | Select-Object -First 50 FullName)",
       "Bash(helm repo *)",
-      "Bash(helm search *)"
+      "Bash(helm search *)",
+      "Bash(Get-ChildItem -Path \"d:\\\\BACKEND\\\\PROJECTS\\\\microservices-base-platform\\\\services\\\\notification\\\\\" -Recurse -File | Select-Object -ExpandProperty FullName | Sort-Object)"
     ]
   }
 }

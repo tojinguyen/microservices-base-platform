@@ -8,10 +8,11 @@ import (
 )
 
 const (
-	ModeAPI           = "api"
-	ModeWorkerPending = "worker-pending"
-	ModeWorkerEmail   = "worker-email"
-	ModeWorkerWebhook = "worker-webhook"
+	ModeAPI              = "api"
+	ModeWorkerPending    = "worker-pending"
+	ModeWorkerEmail      = "worker-email"
+	ModeWorkerWebhook    = "worker-webhook"
+	ModeWorkerScheduler  = "worker-scheduler"
 )
 
 type Config struct {

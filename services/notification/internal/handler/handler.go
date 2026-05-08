@@ -6,6 +6,7 @@ import (
 	"backend/pkg/response"
 
 	"github.com/gin-gonic/gin"
+	"github.com/tojinguyen/notification/internal/domain"
 	"github.com/tojinguyen/notification/internal/dto"
 	"github.com/tojinguyen/notification/internal/service"
 )
@@ -53,6 +54,33 @@ func (h *NotificationHandler) SendNotification(c *gin.Context) {
 	}
 
 	resp, err := h.service.CreateNotification(c.Request.Context(), req)
+	if err != nil {
+		response.Error(c.Writer, c.Request, err)
+		return
+	}
+
+	response.OK(c.Writer, resp)
+}
+
+// ScheduleNotification godoc
+// @Summary Schedule a notification for future delivery
+// @Description Inserts a notification that will be delivered at the specified scheduled_at time
+// @Tags notifications
+// @Accept json
+// @Produce json
+// @Param body body dto.ScheduleNotificationRequest true "Schedule request"
+// @Success 202 {object} response.StandardResponse{data=dto.ScheduleNotificationResponse}
+// @Failure 400 {object} response.StandardResponse{error=object{code=int,message=string}}
+// @Failure 500 {object} response.StandardResponse{error=object{code=int,message=string}}
+// @Router /schedule [post]
+func (h *NotificationHandler) ScheduleNotification(c *gin.Context) {
+	var req dto.ScheduleNotificationRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c.Writer, c.Request, err)
+		return
+	}
+
+	resp, err := h.service.ScheduleNotification(c.Request.Context(), req)
 	if err != nil {
 		response.Error(c.Writer, c.Request, err)
 		return
@@ -187,4 +215,106 @@ func (h *PreferenceHandler) UpsertPreferences(c *gin.Context) {
 	}
 
 	response.OK(c.Writer, resp)
+}
+
+// --- ScheduleHandler ---
+
+type ScheduleHandler struct {
+	svc service.SchedulerService
+}
+
+func NewScheduleHandler(svc service.SchedulerService) *ScheduleHandler {
+	return &ScheduleHandler{svc: svc}
+}
+
+// UpsertSchedule godoc
+// @Summary Set a recurring daily notification schedule
+// @Description Creates or updates a daily notification schedule for a user (identified by path :id).
+// @Tags schedules
+// @Accept json
+// @Produce json
+// @Param id   path string                    true "User ID"
+// @Param body body dto.UpsertScheduleRequest true "Schedule config"
+// @Success 200 {object} response.StandardResponse{data=dto.ScheduleItem}
+// @Failure 400 {object} response.StandardResponse{error=object{code=int,message=string}}
+// @Failure 500 {object} response.StandardResponse{error=object{code=int,message=string}}
+// @Router /api/v1/users/{id}/notification-schedules [put]
+func (h *ScheduleHandler) UpsertSchedule(c *gin.Context) {
+	userID := c.Param("id")
+	if userID == "" {
+		response.Error(c.Writer, c.Request, errors.New("user id is required"))
+		return
+	}
+
+	var req dto.UpsertScheduleRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c.Writer, c.Request, err)
+		return
+	}
+	req.UserID = userID
+
+	item, err := h.svc.UpsertSchedule(c.Request.Context(), req)
+	if err != nil {
+		response.Error(c.Writer, c.Request, err)
+		return
+	}
+
+	response.OK(c.Writer, item)
+}
+
+// GetSchedules godoc
+// @Summary Get all notification schedules for a user
+// @Tags schedules
+// @Produce json
+// @Param id path string true "User ID"
+// @Success 200 {object} response.StandardResponse{data=dto.GetSchedulesResponse}
+// @Failure 400 {object} response.StandardResponse{error=object{code=int,message=string}}
+// @Failure 500 {object} response.StandardResponse{error=object{code=int,message=string}}
+// @Router /api/v1/users/{id}/notification-schedules [get]
+func (h *ScheduleHandler) GetSchedules(c *gin.Context) {
+	userID := c.Param("id")
+	if userID == "" {
+		response.Error(c.Writer, c.Request, errors.New("user id is required"))
+		return
+	}
+
+	resp, err := h.svc.GetSchedules(c.Request.Context(), userID)
+	if err != nil {
+		response.Error(c.Writer, c.Request, err)
+		return
+	}
+
+	response.OK(c.Writer, resp)
+}
+
+// DeleteSchedule godoc
+// @Summary Delete a notification schedule
+// @Tags schedules
+// @Accept json
+// @Produce json
+// @Param id   path string                     true "User ID"
+// @Param body body dto.DeleteScheduleRequest  true "Event type to delete"
+// @Success 200 {object} response.StandardResponse{data=string}
+// @Failure 400 {object} response.StandardResponse{error=object{code=int,message=string}}
+// @Failure 500 {object} response.StandardResponse{error=object{code=int,message=string}}
+// @Router /api/v1/users/{id}/notification-schedules [delete]
+func (h *ScheduleHandler) DeleteSchedule(c *gin.Context) {
+	userID := c.Param("id")
+	if userID == "" {
+		response.Error(c.Writer, c.Request, errors.New("user id is required"))
+		return
+	}
+
+	var req dto.DeleteScheduleRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c.Writer, c.Request, err)
+		return
+	}
+
+	if err := h.svc.DeleteSchedule(c.Request.Context(), userID, domain.EventType(req.EventType)); err != nil {
+		response.Error(c.Writer, c.Request, err)
+		return
+	}
+
+	response.OK(c.Writer, "schedule deleted")
 }

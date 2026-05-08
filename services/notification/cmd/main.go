@@ -72,6 +72,8 @@ func main() {
 		runEmailWorker(ctx, cfg, database)
 	case notificationConfig.ModeWorkerWebhook:
 		runWebhookWorker(ctx, cfg, database)
+	case notificationConfig.ModeWorkerScheduler:
+		runSchedulerWorker(ctx, cfg, database)
 	case notificationConfig.ModeAPI:
 		runAPI(ctx, cfg, database)
 	default:
@@ -110,14 +112,18 @@ func runAPI(ctx context.Context, cfg *notificationConfig.Config, database *gorm.
 		log.Error("failed to seed notification templates", zap.Error(err))
 	}
 
+	scheduleRepo := repository.NewScheduleRepository(database)
+	schedulerSvc := service.NewSchedulerService(scheduleRepo, notificationService)
+
 	notificationHandler := handler.NewNotificationHandler(notificationService)
 	preferenceHandler := handler.NewPreferenceHandler(prefSvc)
+	scheduleHandler := handler.NewScheduleHandler(schedulerSvc)
 
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
 	r.Use(gin.Recovery())
 	r.Use(logger.GinMiddleware())
-	route.RegisterRoutes(r, notificationHandler, preferenceHandler, limiter, cfg.RateLimit)
+	route.RegisterRoutes(r, notificationHandler, preferenceHandler, scheduleHandler, limiter, cfg.RateLimit)
 
 	srv := &http.Server{
 		Addr:    fmt.Sprintf(":%d", cfg.ServerPort),
@@ -169,6 +175,21 @@ func runEmailWorker(ctx context.Context, cfg *notificationConfig.Config, databas
 
 	log.Info("Email worker starting")
 	emailWorker.Start(ctx)
+}
+
+func runSchedulerWorker(ctx context.Context, cfg *notificationConfig.Config, database *gorm.DB) {
+	log := logger.L()
+
+	notificationRepo := repository.NewNotificationRepository(database)
+	templateRepo := repository.NewTemplateRepository(database)
+	scheduleRepo := repository.NewScheduleRepository(database)
+	notificationSvc := service.NewNotificationService(notificationRepo, templateRepo, nil, nil, cfg)
+	schedulerSvc := service.NewSchedulerService(scheduleRepo, notificationSvc)
+
+	schedulerWorker := worker.NewSchedulerWorker(schedulerSvc)
+
+	log.Info("Scheduler worker starting")
+	schedulerWorker.Start(ctx)
 }
 
 func runWebhookWorker(ctx context.Context, cfg *notificationConfig.Config, database *gorm.DB) {

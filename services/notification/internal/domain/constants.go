@@ -9,7 +9,8 @@ const (
 	EventOrderCreated   EventType = "order_created"
 	EventPaymentSuccess EventType = "payment_success"
 
-	EventPromotion EventType = "promotion_campaign"
+	EventPromotion    EventType = "promotion_campaign"
+	EventDailyReminder EventType = "daily_reminder"
 )
 
 type NotificationChannel string

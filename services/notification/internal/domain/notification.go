@@ -23,7 +23,8 @@ type Notification struct {
 
 	Metadata string `gorm:"type:text" json:"metadata"`
 
-	SentAt *time.Time `json:"sent_at,omitempty"`
+	ScheduledAt time.Time  `gorm:"not null;default:now()" json:"scheduled_at"`
+	SentAt      *time.Time `json:"sent_at,omitempty"`
 }
 
 type NotificationTemplate struct {

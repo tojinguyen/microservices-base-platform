@@ -90,8 +90,9 @@ func (r *notificationRepository) ClaimPendingBatch(ctx context.Context, limit in
 		if err := tx.Raw(`
 			SELECT * FROM notifications
 			WHERE status = 'pending'
+			  AND scheduled_at <= NOW()
 			  AND (next_retry_at IS NULL OR next_retry_at <= NOW())
-			ORDER BY created_at ASC
+			ORDER BY scheduled_at ASC, created_at ASC
 			LIMIT ?
 			FOR UPDATE SKIP LOCKED
 		`, limit).Scan(&notifications).Error; err != nil {

@@ -13,7 +13,7 @@ import (
 	"github.com/tojinguyen/notification/internal/handler"
 )
 
-func RegisterRoutes(r *gin.Engine, notificationHandler *handler.NotificationHandler, preferenceHandler *handler.PreferenceHandler, limiter *ratelimit.RateLimiter, rlCfg notificationConfig.RateLimitConfig) {
+func RegisterRoutes(r *gin.Engine, notificationHandler *handler.NotificationHandler, preferenceHandler *handler.PreferenceHandler, scheduleHandler *handler.ScheduleHandler, limiter *ratelimit.RateLimiter, rlCfg notificationConfig.RateLimitConfig) {
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	v1 := r.Group("/api/v1/notifications")
@@ -27,6 +27,7 @@ func RegisterRoutes(r *gin.Engine, notificationHandler *handler.NotificationHand
 			}, rlCfg.SendLimit, time.Duration(rlCfg.SendWindowSecs)*time.Second),
 			notificationHandler.SendNotification,
 		)
+		v1.POST("/schedule", notificationHandler.ScheduleNotification)
 		v1.POST("/webhooks/mailpit", notificationHandler.HandleMailpitWebhook)
 	}
 
@@ -35,5 +36,9 @@ func RegisterRoutes(r *gin.Engine, notificationHandler *handler.NotificationHand
 	{
 		users.GET("/:id/notification-preferences", preferenceHandler.GetPreferences)
 		users.PUT("/:id/notification-preferences", preferenceHandler.UpsertPreferences)
+
+		users.GET("/:id/notification-schedules", scheduleHandler.GetSchedules)
+		users.PUT("/:id/notification-schedules", scheduleHandler.UpsertSchedule)
+		users.DELETE("/:id/notification-schedules", scheduleHandler.DeleteSchedule)
 	}
 }

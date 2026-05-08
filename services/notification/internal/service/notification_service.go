@@ -24,6 +24,7 @@ import (
 
 type NotificationService interface {
 	CreateNotification(ctx context.Context, event dto.SendNotificationRequest) (dto.SendNotificationResponse, error)
+	ScheduleNotification(ctx context.Context, req dto.ScheduleNotificationRequest) (dto.ScheduleNotificationResponse, error)
 	SeedTemplates(ctx context.Context) error
 	UpdateStatus(ctx context.Context, notificationID string, status domain.NotificationStatus, errorMessage string, sentAt *time.Time) error
 	HandleMailpitWebhook(ctx context.Context, webhook dto.MailpitWebhook) error
@@ -122,6 +123,92 @@ func (s *notificationService) CreateNotification(ctx context.Context, event dto.
 	return dto.SendNotificationResponse{
 		NotificationID: createdNotification.Id.String(),
 		Message:        "notification sent successfully",
+	}, nil
+}
+
+func (s *notificationService) ScheduleNotification(ctx context.Context, req dto.ScheduleNotificationRequest) (dto.ScheduleNotificationResponse, error) {
+	if !req.ScheduledAt.After(time.Now().UTC()) {
+		return dto.ScheduleNotificationResponse{}, fmt.Errorf("scheduled_at must be in the future")
+	}
+	if req.ScheduledAt.After(time.Now().UTC().AddDate(1, 0, 0)) {
+		return dto.ScheduleNotificationResponse{}, fmt.Errorf("scheduled_at cannot be more than 1 year in the future")
+	}
+
+	tmpl, err := s.templateRepo.GetByEventType(ctx, req.EventType)
+	if err != nil {
+		return dto.ScheduleNotificationResponse{}, fmt.Errorf("failed to get template for event %s: %w", req.EventType, err)
+	}
+
+	if s.prefSvc != nil {
+		enabled, err := s.prefSvc.IsNotificationEnabled(ctx, req.UserID, tmpl.EventType, tmpl.Channel)
+		if err != nil {
+			logger.L().Warn("preference check failed, scheduling anyway",
+				zap.String("user_id", req.UserID),
+				zap.String("event_type", string(req.EventType)),
+				zap.Error(err),
+			)
+		} else if !enabled {
+			return dto.ScheduleNotificationResponse{Message: "notification skipped - user opted out"}, nil
+		}
+	}
+
+	title, err := s.render(tmpl.Subject, req.Payload)
+	if err != nil {
+		return dto.ScheduleNotificationResponse{}, fmt.Errorf("failed to render title: %w", err)
+	}
+
+	content, err := s.render(tmpl.Content, req.Payload)
+	if err != nil {
+		return dto.ScheduleNotificationResponse{}, fmt.Errorf("failed to render content: %w", err)
+	}
+
+	var metadataStr string
+	if req.Metadata != nil {
+		b, err := json.Marshal(req.Metadata)
+		if err != nil {
+			return dto.ScheduleNotificationResponse{}, fmt.Errorf("failed to marshal metadata: %w", err)
+		}
+		metadataStr = string(b)
+	}
+
+	notification := &domain.Notification{
+		EventType:   tmpl.EventType,
+		UserID:      req.UserID,
+		Channel:     tmpl.Channel,
+		Status:      domain.NotificationStatusPending,
+		Metadata:    metadataStr,
+		Subject:     title,
+		Content:     content,
+		ScheduledAt: req.ScheduledAt.UTC(),
+	}
+
+	if v, ok := req.Payload["recipient"].(string); ok {
+		notification.Recipient = v
+	}
+
+	if tmpl.Channel == domain.ChannelEmail {
+		if notification.Recipient == "" {
+			return dto.ScheduleNotificationResponse{}, fmt.Errorf("recipient is required for email channel")
+		}
+		if _, err := mail.ParseAddress(notification.Recipient); err != nil {
+			return dto.ScheduleNotificationResponse{}, fmt.Errorf("invalid recipient email address %q: %w", notification.Recipient, err)
+		}
+	}
+
+	created, err := s.repo.Create(ctx, notification)
+	if err != nil {
+		return dto.ScheduleNotificationResponse{}, err
+	}
+
+	logger.L().Info("notification scheduled",
+		zap.String("id", created.Id.String()),
+		zap.Time("scheduled_at", created.ScheduledAt),
+	)
+
+	return dto.ScheduleNotificationResponse{
+		NotificationID: created.Id.String(),
+		ScheduledAt:    created.ScheduledAt,
+		Message:        "notification scheduled successfully",
 	}, nil
 }
 

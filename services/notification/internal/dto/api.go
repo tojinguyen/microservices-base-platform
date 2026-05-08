@@ -13,6 +13,20 @@ type SendNotificationRequest struct {
 	Metadata  map[string]interface{} `json:"metadata,omitempty"`
 }
 
+type ScheduleNotificationRequest struct {
+	UserID      string                 `json:"user_id"      binding:"required"`
+	EventType   domain.EventType       `json:"event_type"   binding:"required"`
+	Payload     map[string]interface{} `json:"payload"      binding:"required"`
+	Metadata    map[string]interface{} `json:"metadata,omitempty"`
+	ScheduledAt time.Time              `json:"scheduled_at" binding:"required"`
+}
+
+type ScheduleNotificationResponse struct {
+	NotificationID string    `json:"notification_id"`
+	ScheduledAt    time.Time `json:"scheduled_at"`
+	Message        string    `json:"message"`
+}
+
 type HealthResponse struct {
 	Service string `json:"service"`
 	Status  string `json:"status"`
@@ -80,4 +94,34 @@ type UpsertPreferencesResponse struct {
 	UserID      string           `json:"user_id"`
 	Preferences []PreferenceItem `json:"preferences"`
 	Message     string           `json:"message"`
+}
+
+// --- Schedule DTOs ---
+
+type UpsertScheduleRequest struct {
+	UserID    string                 `json:"user_id"    binding:"required"`
+	EventType domain.EventType       `json:"event_type" binding:"required"`
+	SendTime  string                 `json:"send_time"  binding:"required"` // "HH:MM"
+	Timezone  string                 `json:"timezone"   binding:"required"` // IANA tz, e.g. "Asia/Ho_Chi_Minh"
+	Enabled   bool                   `json:"enabled"`
+	Payload   map[string]interface{} `json:"payload,omitempty"`
+}
+
+type ScheduleItem struct {
+	ID         string           `json:"id"`
+	EventType  domain.EventType `json:"event_type"`
+	SendTime   string           `json:"send_time"`
+	Timezone   string           `json:"timezone"`
+	Enabled    bool             `json:"enabled"`
+	LastSentAt *time.Time       `json:"last_sent_at,omitempty"`
+	CreatedAt  time.Time        `json:"created_at"`
+}
+
+type GetSchedulesResponse struct {
+	UserID    string         `json:"user_id"`
+	Schedules []ScheduleItem `json:"schedules"`
+}
+
+type DeleteScheduleRequest struct {
+	EventType domain.EventType `json:"event_type" binding:"required"`
 }

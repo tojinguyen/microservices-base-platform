@@ -4,7 +4,7 @@ Các tính năng có thể build thêm để học chuyên sâu về backend, s�
 
 ---
 
-## 1. Notification History API — Pagination & Filtering
+## 1. Notification History API — Pagination & Filtering (DONE)
 
 **Chủ đề học:** Cursor-based pagination, composite index, API design
 
@@ -112,7 +112,7 @@ Sau đó build Grafana dashboard từ các metrics này và deploy vào K8s clus
 
 ---
 
-## 5. Circuit Breaker cho SMTP — Resilience Pattern
+## 5. Circuit Breaker cho SMTP — Resilience Pattern (DONE)
 
 **Chủ đề học:** Circuit breaker pattern (Closed → Open → Half-Open), tránh cascade failure
 
