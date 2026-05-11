@@ -20,7 +20,7 @@ Hiện tại không có API nào để query lịch sử notification. Cần bui
 
 ---
 
-## 2. Scheduled Notifications — Delayed Delivery
+## 2. Scheduled Notifications — Delayed Delivery (DONE)
 
 **Chủ đề học:** Background job scheduling, time-based query, cron patterns trong Go
 
@@ -173,7 +173,7 @@ Outbox:    ghi DB + outbox trong 1 transaction → outbox worker poll + publish
 
 ---
 
-## 8. User Notification Preferences — Feature Design
+## 8. User Notification Preferences — Feature Design (DONE)
 
 **Chủ đề học:** Schema design, business logic phức tạp, user-facing API
 
@@ -188,22 +188,6 @@ Cho phép user tự quản lý notification họ muốn nhận:
 
 **Use-case thực tế:**
 > User LinkedIn chỉ muốn nhận email về "job alert" và "connection request", tắt hết notification marketing. Mỗi khi có event, hệ thống check preferences trong Redis (cache hit ~99%) → bỏ qua nếu user đã tắt channel đó. Không có feature này, user spam unsubscribe hoặc block email domain — ảnh hưởng deliverability toàn hệ thống.
-
----
-
-## 9. Digest / Batching — Advanced Delivery
-
-**Chủ đề học:** Message aggregation, time-window batching, trade-off latency vs UX
-
-Thay vì gửi 10 email riêng lẻ cho cùng 1 user trong 1 giờ, gộp thành 1 email:
-
-- Thêm column `digest_key VARCHAR` = `{user_id}:{date}:{channel}`
-- Thêm column `digest_sent_at TIMESTAMPTZ`
-- Digest worker chạy định kỳ (ví dụ: mỗi giờ), query và group theo `digest_key`
-- Template riêng cho digest (list các notification trong ngày)
-
-**Use-case thực tế:**
-> GitHub — một repo hot có 50 comment mới trong 1 giờ. Không có digest: user nhận 50 email riêng lẻ, unsubscribe ngay. Với digest: user nhận 1 email "50 hoạt động mới trong repo X" mỗi giờ — vẫn được inform nhưng không bị spam. Stack Overflow dùng đúng pattern này cho "Daily Digest" email.
 
 ---
 
@@ -253,7 +237,6 @@ Trace một notification từ lúc POST `/send` đến khi email được confir
 [6]  Dead Letter Queue    → RabbitMQ nâng cao, broker-level retry
 [7]  Outbox Pattern       → distributed systems concept cốt lõi
 [8]  Preferences API      → schema design + cache layer
-[9]  Digest/Batching      → advanced delivery logic
 [10] API Key Auth         → security layer hoàn chỉnh
 [11] OpenTelemetry        → khó nhất, reward cao nhất về observability
 ```
