@@ -40,7 +40,7 @@ Thêm khả năng đặt lịch gửi notification vào tương lai:
 
 ---
 
-## 3. Mass Notification Campaign — Fan-out Delivery
+## 3. Mass Notification Campaign — Fan-out Delivery (DONE)
 
 **Chủ đề học:** Fan-out pattern, batch processing, back-pressure, checkpointing
 
