@@ -13,7 +13,15 @@ import (
 	"github.com/tojinguyen/notification/internal/handler"
 )
 
-func RegisterRoutes(r *gin.Engine, notificationHandler *handler.NotificationHandler, preferenceHandler *handler.PreferenceHandler, scheduleHandler *handler.ScheduleHandler, limiter *ratelimit.RateLimiter, rlCfg notificationConfig.RateLimitConfig) {
+func RegisterRoutes(
+	r *gin.Engine,
+	notificationHandler *handler.NotificationHandler,
+	preferenceHandler *handler.PreferenceHandler,
+	scheduleHandler *handler.ScheduleHandler,
+	campaignHandler *handler.CampaignHandler,
+	limiter *ratelimit.RateLimiter,
+	rlCfg notificationConfig.RateLimitConfig,
+) {
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	v1 := r.Group("/api/v1/notifications")
@@ -40,5 +48,16 @@ func RegisterRoutes(r *gin.Engine, notificationHandler *handler.NotificationHand
 		users.GET("/:id/notification-schedules", scheduleHandler.GetSchedules)
 		users.PUT("/:id/notification-schedules", scheduleHandler.UpsertSchedule)
 		users.DELETE("/:id/notification-schedules", scheduleHandler.DeleteSchedule)
+	}
+
+	// Admin endpoints — in production, protect with API key or internal service token middleware.
+	admin := r.Group("/admin")
+	admin.Use(limiter.GinMiddleware(ratelimit.ByIP))
+	{
+		campaigns := admin.Group("/campaigns")
+		{
+			campaigns.POST("", campaignHandler.CreateCampaign)
+			campaigns.GET("/:id/stats", campaignHandler.GetCampaignStats)
+		}
 	}
 }

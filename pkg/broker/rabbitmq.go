@@ -57,18 +57,30 @@ func (r *rabbitMQ) Publish(ctx context.Context, exchange, routingKey string, bod
 }
 
 func (r *rabbitMQ) QueueSubscribe(ctx context.Context, queueName, exchange, routingKey string, handler Handler) error {
+	return r.QueueSubscribeWithOptions(ctx, queueName, exchange, routingKey, handler, QueueOptions{Prefetch: 1})
+}
+
+func (r *rabbitMQ) QueueSubscribeWithOptions(ctx context.Context, queueName, exchange, routingKey string, handler Handler, opts QueueOptions) error {
 	ch, err := r.conn.Channel()
 	if err != nil {
 		return err
 	}
 
+	var queueArgs amqp.Table
+	if len(opts.QueueArgs) > 0 {
+		queueArgs = make(amqp.Table, len(opts.QueueArgs))
+		for k, v := range opts.QueueArgs {
+			queueArgs[k] = v
+		}
+	}
+
 	q, err := ch.QueueDeclare(
 		queueName,
-		true,  // durable
-		false, // auto-delete
-		false, // exclusive
-		false, // no-wait
-		nil,   // arguments
+		true,      // durable
+		false,     // auto-delete
+		false,     // exclusive
+		false,     // no-wait
+		queueArgs, // x-max-length etc.
 	)
 	if err != nil {
 		return err
@@ -77,12 +89,12 @@ func (r *rabbitMQ) QueueSubscribe(ctx context.Context, queueName, exchange, rout
 	if exchange != "" {
 		err = ch.ExchangeDeclare(
 			exchange,
-			"direct", // Assume direct for notification channel routing
-			true,     // durable
-			false,    // auto-deleted
-			false,    // internal
-			false,    // no-wait
-			nil,      // arguments
+			"direct",
+			true,  // durable
+			false, // auto-deleted
+			false, // internal
+			false, // no-wait
+			nil,
 		)
 		if err != nil {
 			return fmt.Errorf("failed to declare exchange: %w", err)
@@ -100,7 +112,11 @@ func (r *rabbitMQ) QueueSubscribe(ctx context.Context, queueName, exchange, rout
 		}
 	}
 
-	err = ch.Qos(1, 0, false)
+	prefetch := opts.Prefetch
+	if prefetch <= 0 {
+		prefetch = 1
+	}
+	err = ch.Qos(prefetch, 0, false)
 	if err != nil {
 		return err
 	}

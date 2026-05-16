@@ -11,6 +11,65 @@ import (
 	"github.com/tojinguyen/notification/internal/service"
 )
 
+// --- CampaignHandler ---
+
+type CampaignHandler struct {
+	svc service.CampaignService
+}
+
+func NewCampaignHandler(svc service.CampaignService) *CampaignHandler {
+	return &CampaignHandler{svc: svc}
+}
+
+// CreateCampaign godoc
+// @Summary      Create a mass notification campaign
+// @Tags         admin
+// @Accept       json
+// @Produce      json
+// @Param        body body dto.CreateCampaignRequest true "Campaign request"
+// @Success      201 {object} response.StandardResponse{data=dto.CreateCampaignResponse}
+// @Failure      400 {object} response.StandardResponse
+// @Router       /admin/campaigns [post]
+func (h *CampaignHandler) CreateCampaign(c *gin.Context) {
+	var req dto.CreateCampaignRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c.Writer, c.Request, err)
+		return
+	}
+
+	resp, err := h.svc.CreateCampaign(c.Request.Context(), req)
+	if err != nil {
+		response.Error(c.Writer, c.Request, err)
+		return
+	}
+
+	response.Created(c.Writer, resp)
+}
+
+// GetCampaignStats godoc
+// @Summary      Get campaign delivery stats
+// @Tags         admin
+// @Produce      json
+// @Param        id path string true "Campaign ID"
+// @Success      200 {object} response.StandardResponse{data=dto.CampaignStatsResponse}
+// @Failure      400 {object} response.StandardResponse
+// @Router       /admin/campaigns/{id}/stats [get]
+func (h *CampaignHandler) GetCampaignStats(c *gin.Context) {
+	campaignID := c.Param("id")
+	if campaignID == "" {
+		response.Error(c.Writer, c.Request, errors.New("campaign id is required"))
+		return
+	}
+
+	resp, err := h.svc.GetCampaignStats(c.Request.Context(), campaignID)
+	if err != nil {
+		response.Error(c.Writer, c.Request, err)
+		return
+	}
+
+	response.OK(c.Writer, resp)
+}
+
 type NotificationHandler struct {
 	service service.NotificationService
 }

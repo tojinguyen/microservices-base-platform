@@ -74,6 +74,8 @@ func main() {
 		runWebhookWorker(ctx, cfg, database)
 	case notificationConfig.ModeWorkerScheduler:
 		runSchedulerWorker(ctx, cfg, database)
+	case notificationConfig.ModeWorkerCampaign:
+		runCampaignWorker(ctx, cfg, database)
 	case notificationConfig.ModeAPI:
 		runAPI(ctx, cfg, database)
 	default:
@@ -115,15 +117,19 @@ func runAPI(ctx context.Context, cfg *notificationConfig.Config, database *gorm.
 	scheduleRepo := repository.NewScheduleRepository(database)
 	schedulerSvc := service.NewSchedulerService(scheduleRepo, templateRepo, notificationService)
 
+	campaignRepo := repository.NewCampaignRepository(database)
+	campaignSvc := service.NewCampaignService(campaignRepo)
+
 	notificationHandler := handler.NewNotificationHandler(notificationService)
 	preferenceHandler := handler.NewPreferenceHandler(prefSvc)
 	scheduleHandler := handler.NewScheduleHandler(schedulerSvc)
+	campaignHandler := handler.NewCampaignHandler(campaignSvc)
 
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
 	r.Use(gin.Recovery())
 	r.Use(logger.GinMiddleware())
-	route.RegisterRoutes(r, notificationHandler, preferenceHandler, scheduleHandler, limiter, cfg.RateLimit)
+	route.RegisterRoutes(r, notificationHandler, preferenceHandler, scheduleHandler, campaignHandler, limiter, cfg.RateLimit)
 
 	srv := &http.Server{
 		Addr:    fmt.Sprintf(":%d", cfg.ServerPort),
@@ -171,10 +177,26 @@ func runEmailWorker(ctx context.Context, cfg *notificationConfig.Config, databas
 	defer brokerClient.Close()
 
 	notificationRepo := repository.NewNotificationRepository(database)
-	emailWorker := worker.NewEmailWorker(notificationRepo, brokerClient, cfg)
+	campaignRepo := repository.NewCampaignRepository(database)
+	emailWorker := worker.NewEmailWorker(notificationRepo, campaignRepo, brokerClient, cfg)
 
 	log.Info("Email worker starting")
 	emailWorker.Start(ctx)
+}
+
+func runCampaignWorker(ctx context.Context, cfg *notificationConfig.Config, database *gorm.DB) {
+	log := logger.L()
+	brokerClient, err := broker.NewRabbitMQ(cfg.Broker)
+	if err != nil {
+		log.Panic("failed to connect to broker", zap.Error(err))
+	}
+	defer brokerClient.Close()
+
+	campaignRepo := repository.NewCampaignRepository(database)
+	campaignWorker := worker.NewCampaignWorker(campaignRepo, brokerClient, cfg)
+
+	log.Info("Campaign worker starting")
+	campaignWorker.Start(ctx)
 }
 
 func runSchedulerWorker(ctx context.Context, cfg *notificationConfig.Config, database *gorm.DB) {

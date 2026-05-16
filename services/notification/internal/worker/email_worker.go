@@ -21,16 +21,23 @@ import (
 
 type EmailWorker struct {
 	repo           repository.NotificationRepository
+	campaignRepo   repository.CampaignRepository
 	broker         broker.Broker
 	cfg            *config.Config
 	circuitBreaker *CircuitBreaker
 }
 
-func NewEmailWorker(repo repository.NotificationRepository, broker broker.Broker, cfg *config.Config) *EmailWorker {
+func NewEmailWorker(
+	repo repository.NotificationRepository,
+	campaignRepo repository.CampaignRepository,
+	b broker.Broker,
+	cfg *config.Config,
+) *EmailWorker {
 	return &EmailWorker{
-		repo:   repo,
-		broker: broker,
-		cfg:    cfg,
+		repo:         repo,
+		campaignRepo: campaignRepo,
+		broker:       b,
+		cfg:          cfg,
 		circuitBreaker: NewCircuitBreaker(
 			cfg.Worker.CircuitBreakerMaxFailures,
 			cfg.Worker.CircuitBreakerOpenDuration,
@@ -42,11 +49,27 @@ func (w *EmailWorker) Start(ctx context.Context) {
 	log := logger.L()
 	log.Info("Email worker started")
 
-	err := w.broker.QueueSubscribe(ctx, "email", w.cfg.Queue.Exchange, string(domain.ChannelEmail), w.HandleMessage)
-	if err != nil {
-		log.Error("Failed to subscribe to email queue", zap.Error(err))
-		return
+	// Regular notification queue.
+	go func() {
+		if err := w.broker.QueueSubscribe(ctx, "email", w.cfg.Queue.Exchange, string(domain.ChannelEmail), w.HandleMessage); err != nil {
+			log.Error("Failed to subscribe to email queue", zap.Error(err))
+		}
+	}()
+
+	// Campaign email queue — custom prefetch and x-max-length for back-pressure.
+	prefetch := w.cfg.Worker.CampaignPrefetch
+	if prefetch <= 0 {
+		prefetch = 20
 	}
+	go func() {
+		opts := broker.QueueOptions{
+			Prefetch:  prefetch,
+			QueueArgs: campaignEmailQueueArgs,
+		}
+		if err := w.broker.QueueSubscribeWithOptions(ctx, campaignEmailRoutingKey, w.cfg.Queue.Exchange, campaignEmailRoutingKey, w.HandleCampaignMessage, opts); err != nil {
+			log.Error("Failed to subscribe to campaign.email queue", zap.Error(err))
+		}
+	}()
 
 	<-ctx.Done()
 	log.Info("Email worker stopping")
@@ -98,6 +121,90 @@ func (w *EmailWorker) HandleMessage(ctx context.Context, body []byte) error {
 
 	log.Info("Email sent successfully", zap.String("notification_id", task.NotificationID))
 	return nil
+}
+
+// HandleCampaignMessage processes a CampaignTask from the campaign.email queue.
+// It sends via SMTP, then inserts an audit notification record and updates recipient status
+// AFTER the send result is known — avoiding pending-forever records on SMTP timeout.
+func (w *EmailWorker) HandleCampaignMessage(ctx context.Context, body []byte) error {
+	log := logger.L()
+	var task dto.CampaignTask
+	if err := json.Unmarshal(body, &task); err != nil {
+		log.Error("failed to unmarshal campaign task", zap.Error(err))
+		return err
+	}
+
+	log.Info("sending campaign email",
+		zap.String("campaign_id", task.CampaignID),
+		zap.String("user_id", task.UserID),
+		zap.String("recipient", task.Recipient),
+	)
+
+	// Use "campaign:<campaignID>:<userID>" as the X-Notification-ID header so Mailpit
+	// webhooks can be linked back even without a pre-existing notifications row.
+	emailID := fmt.Sprintf("campaign:%s:%s", task.CampaignID, task.UserID)
+	sendErr := w.sendEmail(emailID, task.Recipient, task.Subject, task.Content)
+
+	if errors.Is(sendErr, ErrCircuitBreakerOpen) {
+		log.Warn("circuit breaker open, NACK campaign message",
+			zap.String("campaign_id", task.CampaignID))
+		return sendErr
+	}
+
+	campaignID, _ := uuid.Parse(task.CampaignID)
+
+	if sendErr != nil {
+		log.Error("failed to send campaign email",
+			zap.String("campaign_id", task.CampaignID),
+			zap.String("user_id", task.UserID),
+			zap.Error(sendErr),
+		)
+		w.insertCampaignAudit(ctx, task, domain.NotificationStatusFailed, sendErr.Error())
+		_ = w.campaignRepo.UpdateRecipientStatus(ctx, campaignID, task.UserID, domain.CampaignRecipientStatusFailed)
+		_ = w.campaignRepo.IncrementCampaignCounter(ctx, campaignID, "failed_count")
+		return sendErr
+	}
+
+	now := time.Now().UTC()
+	w.insertCampaignAudit(ctx, task, domain.NotificationStatusSent, "")
+	_ = w.campaignRepo.UpdateRecipientStatus(ctx, campaignID, task.UserID, domain.CampaignRecipientStatusSent)
+	_ = w.campaignRepo.IncrementCampaignCounter(ctx, campaignID, "sent_count")
+
+	log.Info("campaign email sent",
+		zap.String("campaign_id", task.CampaignID),
+		zap.String("user_id", task.UserID),
+		zap.Time("sent_at", now),
+	)
+	return nil
+}
+
+// insertCampaignAudit writes a post-send audit record to the notifications table.
+// Failures here are logged but not propagated — the audit log is best-effort.
+func (w *EmailWorker) insertCampaignAudit(ctx context.Context, task dto.CampaignTask, status domain.NotificationStatus, errMsg string) {
+	log := logger.L()
+	now := time.Now().UTC()
+	var sentAt *time.Time
+	if status == domain.NotificationStatusSent {
+		sentAt = &now
+	}
+	notification := &domain.Notification{
+		EventType: task.EventType,
+		UserID:    task.UserID,
+		Channel:   task.Channel,
+		Recipient: task.Recipient,
+		Subject:   task.Subject,
+		Content:   task.Content,
+		Status:    status,
+		SentAt:    sentAt,
+		ErrorMessage: errMsg,
+		Metadata:  fmt.Sprintf(`{"campaign_id":"%s"}`, task.CampaignID),
+	}
+	if _, err := w.repo.Create(ctx, notification); err != nil {
+		log.Error("failed to insert campaign audit notification",
+			zap.String("campaign_id", task.CampaignID),
+			zap.Error(err),
+		)
+	}
 }
 
 func retryDelay(retryCount int) time.Duration {

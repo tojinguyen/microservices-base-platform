@@ -125,3 +125,40 @@ type GetSchedulesResponse struct {
 type DeleteScheduleRequest struct {
 	EventType domain.EventType `json:"event_type" binding:"required"`
 }
+
+// --- Campaign DTOs ---
+
+type RecipientInput struct {
+	UserID    string `json:"user_id"   binding:"required"`
+	Recipient string `json:"recipient" binding:"required"`
+}
+
+type CreateCampaignRequest struct {
+	Title          string                     `json:"title"           binding:"required"`
+	Subject        string                     `json:"subject"`
+	Content        string                     `json:"content"         binding:"required"`
+	Channel        domain.NotificationChannel `json:"channel"         binding:"required"`
+	EventType      domain.EventType           `json:"event_type"      binding:"required"`
+	ScheduledAt    time.Time                  `json:"scheduled_at"    binding:"required"`
+	TargetAudience string                     `json:"target_audience"` // e.g., "all_users", "specific"
+	Recipients     []RecipientInput           `json:"recipients"`      // Optional, only used when TargetAudience == "specific"
+}
+
+type CreateCampaignResponse struct {
+	CampaignID      string    `json:"campaign_id"`
+	TotalRecipients int       `json:"total_recipients"`
+	ScheduledAt     time.Time `json:"scheduled_at"`
+	Message         string    `json:"message"`
+}
+
+type CampaignStatsResponse struct {
+	CampaignID           string                `json:"campaign_id"`
+	Status               domain.CampaignStatus `json:"status"`
+	TotalRecipients      int                   `json:"total_recipients"`
+	LastDispatchedOffset int                   `json:"last_dispatched_offset"`
+	DispatchedCount      int                   `json:"dispatched_count"`
+	SentCount            int                   `json:"sent_count"`
+	FailedCount          int                   `json:"failed_count"`
+	PendingCount         int                   `json:"pending_count"`
+	ProgressPct          float64               `json:"progress_pct"`
+}

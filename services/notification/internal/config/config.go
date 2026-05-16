@@ -8,11 +8,12 @@ import (
 )
 
 const (
-	ModeAPI              = "api"
-	ModeWorkerPending    = "worker-pending"
-	ModeWorkerEmail      = "worker-email"
-	ModeWorkerWebhook    = "worker-webhook"
-	ModeWorkerScheduler  = "worker-scheduler"
+	ModeAPI             = "api"
+	ModeWorkerPending   = "worker-pending"
+	ModeWorkerEmail     = "worker-email"
+	ModeWorkerWebhook   = "worker-webhook"
+	ModeWorkerScheduler = "worker-scheduler"
+	ModeWorkerCampaign  = "worker-campaign"
 )
 
 type Config struct {
@@ -47,6 +48,12 @@ type WorkerConfig struct {
 	MaxRetries                 int           `mapstructure:"max_retries"`
 	CircuitBreakerMaxFailures  int           `mapstructure:"circuit_breaker_max_failures"`
 	CircuitBreakerOpenDuration time.Duration `mapstructure:"circuit_breaker_open_duration"`
+	// Campaign dispatcher reads up to CampaignBatchSize recipients per DB round-trip.
+	// Defaults to 1000 if unset.
+	CampaignBatchSize int `mapstructure:"campaign_batch_size"`
+	// CampaignPrefetch is the RabbitMQ consumer prefetch for the campaign.email queue
+	// (back-pressure layer 1). Defaults to 20 if unset.
+	CampaignPrefetch int `mapstructure:"campaign_prefetch"`
 }
 
 type RateLimitConfig struct {
