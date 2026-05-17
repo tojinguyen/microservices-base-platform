@@ -210,8 +210,8 @@ Trace một notification từ lúc POST `/send` đến khi email được confir
 ## Thứ tự học được khuyến nghị
 
 ```
-[1]  History API          → nền tảng, dễ thấy kết quả ngay
-[2]  Scheduled Noti       → mở rộng worker hiện có, ít thay đổi
+[1]  History API          → nền tảng, dễ thấy kết quả ngay [DONE]
+[2]  Scheduled Noti       → mở rộng worker hiện có, ít thay đổi [DONE]
 [3]  Mass Campaign        → fan-out pattern, batch processing thực chiến [DONE]
 [4]  Prometheus Metrics   → thấy hệ thống "sống", cần cho monitoring [DONE]
 [5]  Circuit Breaker      → resilience pattern quan trọng nhất [DONE]
