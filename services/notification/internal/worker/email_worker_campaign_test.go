@@ -15,6 +15,7 @@ import (
 	"github.com/tojinguyen/notification/internal/dto"
 	"github.com/tojinguyen/notification/internal/repository"
 	"github.com/tojinguyen/notification/internal/repository/mocks"
+	"gorm.io/gorm"
 )
 
 // mockNotificationRepo is a lightweight mock of NotificationRepository for these tests.
@@ -51,6 +52,14 @@ func (m *mockNotificationRepo) ClaimPendingBatch(ctx context.Context, limit int)
 func (m *mockNotificationRepo) IncrementRetryAndReset(ctx context.Context, id uuid.UUID, msg string, next time.Time) error {
 	args := m.Called(ctx, id, msg, next)
 	return args.Error(0)
+}
+
+func (m *mockNotificationRepo) CreateWithTx(tx *gorm.DB, n *domain.Notification) (*domain.Notification, error) {
+	args := m.Called(tx, n)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.Notification), args.Error(1)
 }
 
 func (m *mockNotificationRepo) List(ctx context.Context, filter repository.NotificationFilter) ([]*domain.Notification, error) {

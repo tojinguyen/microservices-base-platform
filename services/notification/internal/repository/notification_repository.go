@@ -28,7 +28,10 @@ type RepoCursor struct {
 }
 
 type NotificationRepository interface {
+	// Create inserts a notification using its own DB connection.
 	Create(ctx context.Context, notification *domain.Notification) (*domain.Notification, error)
+	// CreateWithTx inserts a notification inside a caller-provided transaction.
+	CreateWithTx(tx *gorm.DB, notification *domain.Notification) (*domain.Notification, error)
 	ExistsByEventID(ctx context.Context, eventID string) (bool, error)
 	UpdateDeliveryStatus(ctx context.Context, notificationID uuid.UUID, status domain.NotificationStatus, errorMessage string, sentAt *time.Time) error
 	ClaimPendingBatch(ctx context.Context, limit int) ([]*domain.Notification, error)
@@ -46,6 +49,11 @@ func NewNotificationRepository(db *gorm.DB) NotificationRepository {
 
 func (r *notificationRepository) Create(ctx context.Context, notification *domain.Notification) (*domain.Notification, error) {
 	err := r.db.WithContext(ctx).Create(notification).Error
+	return notification, err
+}
+
+func (r *notificationRepository) CreateWithTx(tx *gorm.DB, notification *domain.Notification) (*domain.Notification, error) {
+	err := tx.Create(notification).Error
 	return notification, err
 }
 

@@ -14,6 +14,7 @@ const (
 	ModeWorkerWebhook   = "worker-webhook"
 	ModeWorkerScheduler = "worker-scheduler"
 	ModeWorkerCampaign  = "worker-campaign"
+	ModeWorkerOutbox    = "worker-outbox"
 )
 
 type Config struct {
@@ -54,6 +55,13 @@ type WorkerConfig struct {
 	// CampaignPrefetch is the RabbitMQ consumer prefetch for the campaign.email queue
 	// (back-pressure layer 1). Defaults to 20 if unset.
 	CampaignPrefetch int `mapstructure:"campaign_prefetch"`
+
+	// OutboxInterval is the poll interval in seconds for the outbox worker. Defaults to 2.
+	OutboxInterval int `mapstructure:"outbox_interval"`
+	// OutboxBatchSize is the number of outbox events processed per tick. Defaults to 100.
+	OutboxBatchSize int `mapstructure:"outbox_batch_size"`
+	// OutboxMaxRetries is the maximum publish attempts before an event is marked failed. Defaults to 5.
+	OutboxMaxRetries int `mapstructure:"outbox_max_retries"`
 }
 
 type RateLimitConfig struct {

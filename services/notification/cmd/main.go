@@ -76,6 +76,8 @@ func main() {
 		runSchedulerWorker(ctx, cfg, database)
 	case notificationConfig.ModeWorkerCampaign:
 		runCampaignWorker(ctx, cfg, database)
+	case notificationConfig.ModeWorkerOutbox:
+		runOutboxWorker(ctx, cfg, database)
 	case notificationConfig.ModeAPI:
 		runAPI(ctx, cfg, database)
 	default:
@@ -105,10 +107,11 @@ func runAPI(ctx context.Context, cfg *notificationConfig.Config, database *gorm.
 	})
 
 	notificationRepo := repository.NewNotificationRepository(database)
+	outboxRepo := repository.NewOutboxRepository(database)
 	templateRepo := repository.NewTemplateRepository(database)
 	prefRepo := repository.NewPreferenceRepository(database)
 	prefSvc := service.NewPreferenceService(prefRepo, cache)
-	notificationService := service.NewNotificationService(notificationRepo, templateRepo, prefSvc, brokerClient, cfg)
+	notificationService := service.NewNotificationService(database, notificationRepo, outboxRepo, templateRepo, prefSvc, brokerClient, cfg)
 
 	if err := notificationService.SeedTemplates(context.Background()); err != nil {
 		log.Error("failed to seed notification templates", zap.Error(err))
@@ -205,7 +208,7 @@ func runSchedulerWorker(ctx context.Context, cfg *notificationConfig.Config, dat
 	notificationRepo := repository.NewNotificationRepository(database)
 	templateRepo := repository.NewTemplateRepository(database)
 	scheduleRepo := repository.NewScheduleRepository(database)
-	notificationSvc := service.NewNotificationService(notificationRepo, templateRepo, nil, nil, cfg)
+	notificationSvc := service.NewNotificationService(database, notificationRepo, nil, templateRepo, nil, nil, cfg)
 	schedulerSvc := service.NewSchedulerService(scheduleRepo, templateRepo, notificationSvc)
 
 	schedulerWorker := worker.NewSchedulerWorker(schedulerSvc)
@@ -224,10 +227,25 @@ func runWebhookWorker(ctx context.Context, cfg *notificationConfig.Config, datab
 
 	notificationRepo := repository.NewNotificationRepository(database)
 	templateRepo := repository.NewTemplateRepository(database)
-	notificationService := service.NewNotificationService(notificationRepo, templateRepo, nil, brokerClient, cfg)
+	notificationService := service.NewNotificationService(database, notificationRepo, nil, templateRepo, nil, brokerClient, cfg)
 
 	webhookWorker := worker.NewWebhookWorker(notificationService, brokerClient, cfg)
 
 	log.Info("Webhook worker starting")
 	webhookWorker.Start(ctx)
+}
+
+func runOutboxWorker(ctx context.Context, cfg *notificationConfig.Config, database *gorm.DB) {
+	log := logger.L()
+	brokerClient, err := broker.NewRabbitMQ(cfg.Broker)
+	if err != nil {
+		log.Panic("failed to connect to broker", zap.Error(err))
+	}
+	defer brokerClient.Close()
+
+	outboxRepo := repository.NewOutboxRepository(database)
+	outboxWorker := worker.NewOutboxWorker(outboxRepo, brokerClient, cfg)
+
+	log.Info("Outbox worker starting")
+	outboxWorker.Start(ctx)
 }

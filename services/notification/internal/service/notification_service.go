@@ -20,6 +20,7 @@ import (
 	"github.com/tojinguyen/notification/internal/dto"
 	"github.com/tojinguyen/notification/internal/repository"
 	"go.uber.org/zap"
+	"gorm.io/gorm"
 )
 
 type NotificationService interface {
@@ -34,16 +35,28 @@ type NotificationService interface {
 }
 
 type notificationService struct {
+	db           *gorm.DB
 	repo         repository.NotificationRepository
+	outboxRepo   repository.OutboxRepository
 	templateRepo repository.TemplateRepository
 	prefSvc      PreferenceService
 	broker       broker.Broker
 	cfg          *config.Config
 }
 
-func NewNotificationService(repo repository.NotificationRepository, templateRepo repository.TemplateRepository, prefSvc PreferenceService, broker broker.Broker, cfg *config.Config) NotificationService {
+func NewNotificationService(
+	db *gorm.DB,
+	repo repository.NotificationRepository,
+	outboxRepo repository.OutboxRepository,
+	templateRepo repository.TemplateRepository,
+	prefSvc PreferenceService,
+	broker broker.Broker,
+	cfg *config.Config,
+) NotificationService {
 	return &notificationService{
+		db:           db,
 		repo:         repo,
+		outboxRepo:   outboxRepo,
 		templateRepo: templateRepo,
 		prefSvc:      prefSvc,
 		broker:       broker,
@@ -123,7 +136,7 @@ func (s *notificationService) createFromTemplate(ctx context.Context, event dto.
 		}
 	}
 
-	createdNotification, err := s.repo.Create(ctx, notification)
+	createdNotification, err := s.createWithOutbox(ctx, notification)
 	if err != nil {
 		return dto.SendNotificationResponse{}, err
 	}
@@ -132,6 +145,49 @@ func (s *notificationService) createFromTemplate(ctx context.Context, event dto.
 		NotificationID: createdNotification.Id.String(),
 		Message:        "notification sent successfully",
 	}, nil
+}
+
+// createWithOutbox writes the notification and its outbox event atomically in one transaction.
+// The outbox worker polls outbox_events and publishes to RabbitMQ, guaranteeing delivery
+// even if the service crashes after the DB commit.
+func (s *notificationService) createWithOutbox(ctx context.Context, notification *domain.Notification) (*domain.Notification, error) {
+	var created *domain.Notification
+
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var txErr error
+		created, txErr = s.repo.CreateWithTx(tx, notification)
+		if txErr != nil {
+			return txErr
+		}
+
+		payload, txErr := json.Marshal(map[string]any{
+			"notification_id": created.Id,
+			"user_id":         created.UserID,
+			"event_type":      created.EventType,
+			"channel":         created.Channel,
+			"recipient":       created.Recipient,
+			"subject":         created.Subject,
+			"content":         created.Content,
+			"retry_count":     created.RetryCount,
+			// event_id is the notification ID — used by consumers for deduplication
+			"event_id": created.Id,
+		})
+		if txErr != nil {
+			return txErr
+		}
+
+		outboxEvent := &domain.OutboxEvent{
+			AggregateID:   created.Id,
+			AggregateType: "notification",
+			EventType:     "notification.created",
+			Payload:       payload,
+			RoutingKey:    string(created.Channel),
+			Status:        domain.OutboxStatusPending,
+		}
+		return s.outboxRepo.CreateWithTx(tx, outboxEvent)
+	})
+
+	return created, err
 }
 
 func (s *notificationService) ScheduleNotification(ctx context.Context, req dto.ScheduleNotificationRequest) (dto.ScheduleNotificationResponse, error) {
@@ -203,7 +259,7 @@ func (s *notificationService) ScheduleNotification(ctx context.Context, req dto.
 		}
 	}
 
-	created, err := s.repo.Create(ctx, notification)
+	created, err := s.createWithOutbox(ctx, notification)
 	if err != nil {
 		return dto.ScheduleNotificationResponse{}, err
 	}
