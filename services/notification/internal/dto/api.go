@@ -162,3 +162,14 @@ type CampaignStatsResponse struct {
 	PendingCount         int                   `json:"pending_count"`
 	ProgressPct          float64               `json:"progress_pct"`
 }
+
+type DLQMessageResponse struct {
+	ID             string    `json:"id"`
+	NotificationID string    `json:"notification_id,omitempty"`
+	QueueName      string    `json:"queue_name"`
+	Payload        string    `json:"payload"`
+	ErrorMessage   string    `json:"error_message"`
+	Status         string    `json:"status"`
+	CreatedAt      time.Time `json:"created_at"`
+}
+

@@ -31,8 +31,15 @@ func (w *WebhookWorker) Start(ctx context.Context) {
 	log := logger.L()
 	log.Info("Webhook worker started")
 
-	// Subscribe to mailpit webhook queue
-	err := w.broker.QueueSubscribe(ctx, w.cfg.Queue.WebhookMailpit, w.cfg.Queue.Exchange, w.cfg.Queue.WebhookMailpit, w.HandleMessage)
+	// Subscribe to mailpit webhook queue with DLQ options
+	opts := broker.QueueOptions{
+		Prefetch: 1,
+		QueueArgs: map[string]interface{}{
+			"x-dead-letter-exchange":    w.cfg.Queue.Exchange + ".dlq",
+			"x-dead-letter-routing-key": "webhook.dlq",
+		},
+	}
+	err := w.broker.QueueSubscribeWithOptions(ctx, w.cfg.Queue.WebhookMailpit, w.cfg.Queue.Exchange, w.cfg.Queue.WebhookMailpit, w.HandleMessage, opts)
 	if err != nil {
 		log.Error("Failed to subscribe to webhook queue", zap.Error(err))
 		return
@@ -47,14 +54,14 @@ func (w *WebhookWorker) HandleMessage(ctx context.Context, body []byte) error {
 	var webhook dto.MailpitWebhook
 	if err := json.Unmarshal(body, &webhook); err != nil {
 		log.Error("Failed to unmarshal webhook payload", zap.Error(err))
-		return err
+		return broker.ErrRejectToDLQ // Reject to DLQ immediately on malformed JSON
 	}
 
 	log.Info("Processing Mailpit webhook", zap.String("mailpit_id", webhook.ID))
 
 	if err := w.service.HandleMailpitWebhook(ctx, webhook); err != nil {
 		log.Error("Failed to process Mailpit webhook", zap.String("mailpit_id", webhook.ID), zap.Error(err))
-		return err
+		return err // Requeue to retry on database/internal errors
 	}
 
 	return nil

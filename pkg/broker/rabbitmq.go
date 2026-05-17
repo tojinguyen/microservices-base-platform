@@ -3,6 +3,7 @@ package broker
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 
@@ -214,8 +215,13 @@ func (r *rabbitMQ) handleMessages(ctx context.Context, ch *amqp.Channel, msgs <-
 			err := handler(ctx, d.Body)
 
 			if err != nil {
-				log.Printf("Error processing message, requeueing... Error: %v", err)
-				d.Nack(false, true)
+				if errors.Is(err, ErrRejectToDLQ) {
+					log.Printf("Error processing message, rejecting to DLQ... Error: %v", err)
+					d.Nack(false, false) // requeue = false -> RabbitMQ moves to DLQ
+				} else {
+					log.Printf("Error processing message, requeueing... Error: %v", err)
+					d.Nack(false, true)  // requeue = true
+				}
 			} else {
 				d.Ack(false)
 			}

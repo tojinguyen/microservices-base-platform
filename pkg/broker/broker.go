@@ -9,6 +9,11 @@ import (
 // has reached its x-max-length cap. Callers should back off and retry.
 var ErrQueueFull = errors.New("broker: queue is full")
 
+// ErrRejectToDLQ is returned when a handler rejects a message explicitly,
+// directing the broker to send it to the Dead Letter Queue rather than requeueing it.
+var ErrRejectToDLQ = errors.New("broker: reject message to DLQ")
+
+
 type Config struct {
 	Host     string `mapstructure:"host"`
 	Port     int    `mapstructure:"port"`

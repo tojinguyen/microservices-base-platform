@@ -78,6 +78,8 @@ func main() {
 		runCampaignWorker(ctx, cfg, database)
 	case notificationConfig.ModeWorkerOutbox:
 		runOutboxWorker(ctx, cfg, database)
+	case notificationConfig.ModeWorkerDLQ:
+		runDLQWorker(ctx, cfg, database)
 	case notificationConfig.ModeAPI:
 		runAPI(ctx, cfg, database)
 	default:
@@ -123,16 +125,20 @@ func runAPI(ctx context.Context, cfg *notificationConfig.Config, database *gorm.
 	campaignRepo := repository.NewCampaignRepository(database)
 	campaignSvc := service.NewCampaignService(campaignRepo)
 
+	dlqRepo := repository.NewDLQRepository(database)
+	dlqSvc := service.NewDLQService(dlqRepo, notificationRepo, brokerClient, cfg)
+
 	notificationHandler := handler.NewNotificationHandler(notificationService)
 	preferenceHandler := handler.NewPreferenceHandler(prefSvc)
 	scheduleHandler := handler.NewScheduleHandler(schedulerSvc)
 	campaignHandler := handler.NewCampaignHandler(campaignSvc)
+	dlqHandler := handler.NewDLQHandler(dlqSvc)
 
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
 	r.Use(gin.Recovery())
 	r.Use(logger.GinMiddleware())
-	route.RegisterRoutes(r, notificationHandler, preferenceHandler, scheduleHandler, campaignHandler, limiter, cfg.RateLimit)
+	route.RegisterRoutes(r, notificationHandler, preferenceHandler, scheduleHandler, campaignHandler, dlqHandler, limiter, cfg.RateLimit)
 
 	srv := &http.Server{
 		Addr:    fmt.Sprintf(":%d", cfg.ServerPort),
@@ -248,4 +254,19 @@ func runOutboxWorker(ctx context.Context, cfg *notificationConfig.Config, databa
 
 	log.Info("Outbox worker starting")
 	outboxWorker.Start(ctx)
+}
+
+func runDLQWorker(ctx context.Context, cfg *notificationConfig.Config, database *gorm.DB) {
+	log := logger.L()
+	brokerClient, err := broker.NewRabbitMQ(cfg.Broker)
+	if err != nil {
+		log.Panic("failed to connect to broker", zap.Error(err))
+	}
+	defer brokerClient.Close()
+
+	dlqRepo := repository.NewDLQRepository(database)
+	dlqWorker := worker.NewDLQWorker(dlqRepo, brokerClient, cfg)
+
+	log.Info("DLQ worker starting")
+	dlqWorker.Start(ctx)
 }

@@ -49,9 +49,16 @@ func (w *EmailWorker) Start(ctx context.Context) {
 	log := logger.L()
 	log.Info("Email worker started")
 
-	// Regular notification queue.
+	// Regular notification queue with DLQ options.
 	go func() {
-		if err := w.broker.QueueSubscribe(ctx, "email", w.cfg.Queue.Exchange, string(domain.ChannelEmail), w.HandleMessage); err != nil {
+		opts := broker.QueueOptions{
+			Prefetch: 1,
+			QueueArgs: map[string]interface{}{
+				"x-dead-letter-exchange":    w.cfg.Queue.Exchange + ".dlq",
+				"x-dead-letter-routing-key": "email.dlq",
+			},
+		}
+		if err := w.broker.QueueSubscribeWithOptions(ctx, "email", w.cfg.Queue.Exchange, string(domain.ChannelEmail), w.HandleMessage, opts); err != nil {
 			log.Error("Failed to subscribe to email queue", zap.Error(err))
 		}
 	}()
@@ -80,7 +87,7 @@ func (w *EmailWorker) HandleMessage(ctx context.Context, body []byte) error {
 	var task dto.NotificationTask
 	if err := json.Unmarshal(body, &task); err != nil {
 		log.Error("Failed to unmarshal notification task", zap.Error(err))
-		return err
+		return broker.ErrRejectToDLQ // Reject to DLQ immediately on malformed payload
 	}
 
 	log.Info("Sending email",
@@ -92,7 +99,7 @@ func (w *EmailWorker) HandleMessage(ctx context.Context, body []byte) error {
 
 	if errors.Is(err, ErrCircuitBreakerOpen) {
 		log.Warn("Circuit breaker is open, skipping email send", zap.String("notification_id", task.NotificationID))
-		return err
+		return err // Requeue to try again later
 	}
 
 	notificationID, _ := uuid.Parse(task.NotificationID)
@@ -103,15 +110,24 @@ func (w *EmailWorker) HandleMessage(ctx context.Context, body []byte) error {
 		maxRetries := w.cfg.Worker.MaxRetries
 
 		if task.RetryCount < maxRetries {
+			task.RetryCount++
 			delay := retryDelay(task.RetryCount)
-			nextRetryAt := time.Now().UTC().Add(delay)
-			log.Info("Scheduling retry", zap.Duration("delay", delay), zap.Int("attempt", task.RetryCount+1))
-			w.repo.IncrementRetryAndReset(ctx, notificationID, err.Error(), nextRetryAt)
+			log.Info("Scheduling broker-level retry", zap.Duration("delay", delay), zap.Int("attempt", task.RetryCount))
+
+			// Route message to Retry Queue via Retry Exchange
+			retryExchange := w.cfg.Queue.Exchange + ".retry"
+			routingKey := string(domain.ChannelEmail) + ".retry"
+
+			if publishErr := w.broker.Publish(ctx, retryExchange, routingKey, task); publishErr != nil {
+				log.Error("Failed to publish retry message", zap.Error(publishErr))
+				return err // Publish fails -> requeue immediately on main queue as fallback
+			}
+			return nil // Return nil to ACK current message on main queue
 		} else {
 			log.Error("Max retries reached, marking as failed", zap.String("notification_id", task.NotificationID))
 			w.repo.UpdateDeliveryStatus(ctx, notificationID, domain.NotificationStatusFailed, err.Error(), nil)
+			return broker.ErrRejectToDLQ // Rejects message to DLQ natively via RabbitMQ
 		}
-		return err
 	}
 
 	err = w.repo.UpdateDeliveryStatus(ctx, notificationID, domain.NotificationStatusDelivering, "Waiting for webhook confirmation", nil)

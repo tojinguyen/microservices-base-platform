@@ -15,6 +15,7 @@ const (
 	ModeWorkerScheduler = "worker-scheduler"
 	ModeWorkerCampaign  = "worker-campaign"
 	ModeWorkerOutbox    = "worker-outbox"
+	ModeWorkerDLQ       = "worker-dlq"
 )
 
 type Config struct {

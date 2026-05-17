@@ -19,6 +19,7 @@ func RegisterRoutes(
 	preferenceHandler *handler.PreferenceHandler,
 	scheduleHandler *handler.ScheduleHandler,
 	campaignHandler *handler.CampaignHandler,
+	dlqHandler *handler.DLQHandler,
 	limiter *ratelimit.RateLimiter,
 	rlCfg notificationConfig.RateLimitConfig,
 ) {
@@ -58,6 +59,12 @@ func RegisterRoutes(
 		{
 			campaigns.POST("", campaignHandler.CreateCampaign)
 			campaigns.GET("/:id/stats", campaignHandler.GetCampaignStats)
+		}
+
+		dlq := admin.Group("/dlq")
+		{
+			dlq.GET("/messages", dlqHandler.ListMessages)
+			dlq.POST("/replay/:id", dlqHandler.ReplayMessage)
 		}
 	}
 }

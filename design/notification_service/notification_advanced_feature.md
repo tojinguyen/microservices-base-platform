@@ -152,7 +152,7 @@ Hiện tại retry được xử lý ở tầng application (ghi lại DB, worke
 
 ---
 
-## 7. Outbox Pattern — Guaranteed Delivery
+## 7. Outbox Pattern — Guaranteed Delivery (DONE)
 
 **Chủ đề học:** Distributed systems, dual-write problem, at-least-once delivery
 

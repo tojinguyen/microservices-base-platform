@@ -2,6 +2,7 @@ package handler
 
 import (
 	"errors"
+	"strconv"
 
 	"backend/pkg/response"
 
@@ -376,4 +377,66 @@ func (h *ScheduleHandler) DeleteSchedule(c *gin.Context) {
 	}
 
 	response.OK(c.Writer, "schedule deleted")
+}
+
+// --- DLQHandler ---
+
+type DLQHandler struct {
+	svc service.DLQService
+}
+
+func NewDLQHandler(svc service.DLQService) *DLQHandler {
+	return &DLQHandler{svc: svc}
+}
+
+// ListMessages godoc
+// @Summary      List Dead Letter Queue messages
+// @Tags         admin
+// @Produce      json
+// @Param        status query string false "Filter by status (pending|replayed|ignored)"
+// @Param        page   query int    false "Page number"
+// @Param        limit  query int    false "Page limit"
+// @Success      200 {object} response.StandardResponse{data=object{messages=[]dto.DLQMessageResponse,total=int}}
+// @Failure      400 {object} response.StandardResponse
+// @Router       /admin/dlq/messages [get]
+func (h *DLQHandler) ListMessages(c *gin.Context) {
+	status := c.Query("status")
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
+
+	msgs, total, err := h.svc.ListDLQMessages(c.Request.Context(), status, page, limit)
+	if err != nil {
+		response.Error(c.Writer, c.Request, err)
+		return
+	}
+
+	response.OK(c.Writer, gin.H{
+		"messages": msgs,
+		"total":    total,
+		"page":     page,
+		"limit":    limit,
+	})
+}
+
+// ReplayMessage godoc
+// @Summary      Replay a Dead Letter Queue message
+// @Tags         admin
+// @Produce      json
+// @Param        id path string true "Message ID"
+// @Success      200 {object} response.StandardResponse{data=string}
+// @Failure      400 {object} response.StandardResponse
+// @Router       /admin/dlq/replay/{id} [post]
+func (h *DLQHandler) ReplayMessage(c *gin.Context) {
+	id := c.Param("id")
+	if id == "" {
+		response.Error(c.Writer, c.Request, errors.New("message id is required"))
+		return
+	}
+
+	if err := h.svc.ReplayDLQMessage(c.Request.Context(), id); err != nil {
+		response.Error(c.Writer, c.Request, err)
+		return
+	}
+
+	response.OK(c.Writer, "Message replayed successfully")
 }
