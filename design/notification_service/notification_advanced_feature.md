@@ -135,7 +135,7 @@ HALF-OPEN → cho qua 1 request thử, nếu OK thì về CLOSED
 
 ---
 
-## 6. Dead Letter Queue (DLQ) — RabbitMQ nâng cao
+## 6. Dead Letter Queue (DLQ) — RabbitMQ nâng cao (DONE)
 
 **Chủ đề học:** DLQ pattern, message TTL, replay mechanism, tách retry logic khỏi application
 
@@ -191,26 +191,7 @@ Cho phép user tự quản lý notification họ muốn nhận:
 
 ---
 
-## 10. Multi-tenant API Key Auth — Security Layer
-
-**Chủ đề học:** API key management, per-tenant rate limiting, authorization middleware
-
-Hiện tại `/send` không cần auth — bất kỳ ai cũng gọi được.
-
-- Bảng `api_keys (id, tenant_id, hashed_key, quota_per_day, last_used_at)`
-- Middleware: lookup Redis cache trước (key = hash), fallback DB
-- Rate limit per API key thay vì per IP
-- API:
-  - `POST /admin/api-keys` — tạo key mới
-  - `DELETE /admin/api-keys/:id` — revoke
-  - `GET /admin/api-keys/:id/usage` — usage stats
-
-**Use-case thực tế:**
-> Notification service được dùng chung bởi 3 product team: Identity, Payment, và Marketing. Không có API key: Marketing team vô tình gửi campaign làm quota SMTP cạn kiệt, Payment team không gửi được OTP cho user. Với multi-tenant key: mỗi team có quota riêng (Marketing: 100k/ngày, Payment: unlimited), revoke key Marketing mà không ảnh hưởng team khác.
-
----
-
-## 11. OpenTelemetry Distributed Tracing
+## 9. OpenTelemetry Distributed Tracing
 
 **Chủ đề học:** Distributed tracing, trace propagation qua message broker, Jaeger/Tempo
 
@@ -231,14 +212,13 @@ Trace một notification từ lúc POST `/send` đến khi email được confir
 ```
 [1]  History API          → nền tảng, dễ thấy kết quả ngay
 [2]  Scheduled Noti       → mở rộng worker hiện có, ít thay đổi
-[3]  Mass Campaign        → fan-out pattern, batch processing thực chiến
-[4]  Prometheus Metrics   → thấy hệ thống "sống", cần cho monitoring
-[5]  Circuit Breaker      → resilience pattern quan trọng nhất
-[6]  Dead Letter Queue    → RabbitMQ nâng cao, broker-level retry
-[7]  Outbox Pattern       → distributed systems concept cốt lõi
-[8]  Preferences API      → schema design + cache layer
-[10] API Key Auth         → security layer hoàn chỉnh
-[11] OpenTelemetry        → khó nhất, reward cao nhất về observability
+[3]  Mass Campaign        → fan-out pattern, batch processing thực chiến [DONE]
+[4]  Prometheus Metrics   → thấy hệ thống "sống", cần cho monitoring [DONE]
+[5]  Circuit Breaker      → resilience pattern quan trọng nhất [DONE]
+[6]  Dead Letter Queue    → RabbitMQ nâng cao, broker-level retry [DONE]
+[7]  Outbox Pattern       → distributed systems concept cốt lõi [DONE]
+[8]  Preferences API      → schema design + cache layer [DONE]
+[9]  OpenTelemetry        → khó nhất, reward cao nhất về observability
 ```
 
 ---
