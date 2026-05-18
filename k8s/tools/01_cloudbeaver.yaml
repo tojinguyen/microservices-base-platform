@@ -41,6 +41,15 @@ spec:
           volumeMounts:
             - name: cloudbeaver-data
               mountPath: /opt/cloudbeaver/workspace
+            - name: cloudbeaver-config-volume
+              mountPath: /opt/cloudbeaver/conf/cloudbeaver.conf
+              subPath: cloudbeaver.conf
+            - name: cloudbeaver-config-volume
+              mountPath: /opt/cloudbeaver/conf/initial-data.conf
+              subPath: initial-data.conf
+            - name: cloudbeaver-config-volume
+              mountPath: /opt/cloudbeaver/workspace/GlobalConfiguration/.dbeaver/data-sources.json
+              subPath: data-sources.json
           resources:
             requests:
               memory: "256Mi"
@@ -58,6 +67,9 @@ spec:
         - name: cloudbeaver-data
           persistentVolumeClaim:
             claimName: cloudbeaver-pvc
+        - name: cloudbeaver-config-volume
+          configMap:
+            name: cloudbeaver-config
 ---
 apiVersion: v1
 kind: Service
