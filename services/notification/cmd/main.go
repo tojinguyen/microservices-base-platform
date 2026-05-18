@@ -258,7 +258,8 @@ func runOutboxWorker(ctx context.Context, cfg *notificationConfig.Config, databa
 	defer brokerClient.Close()
 
 	outboxRepo := repository.NewOutboxRepository(database)
-	outboxWorker := worker.NewOutboxWorker(outboxRepo, brokerClient, cfg)
+	notificationRepo := repository.NewNotificationRepository(database)
+	outboxWorker := worker.NewOutboxWorker(database, outboxRepo, notificationRepo, brokerClient, cfg)
 
 	log.Info("Outbox worker starting")
 	outboxWorker.Start(ctx)

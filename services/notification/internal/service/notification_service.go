@@ -296,7 +296,7 @@ func (s *notificationService) UpdateStatus(ctx context.Context, notificationID s
 	if err != nil {
 		return err
 	}
-	return s.repo.UpdateDeliveryStatus(ctx, id, status, errorMessage, sentAt)
+	return s.repo.UpdateDeliveryStatus(ctx, id, status, errorMessage, sentAt, nil)
 }
 
 func (s *notificationService) HandleMailpitWebhook(ctx context.Context, webhook dto.MailpitWebhook) error {

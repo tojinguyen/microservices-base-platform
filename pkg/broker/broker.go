@@ -45,6 +45,10 @@ type Broker interface {
 	// x-max-length for back-pressure capping).
 	QueueSubscribeWithOptions(ctx context.Context, queueName, exchange, routingKey string, handler Handler, opts QueueOptions) error
 
+	// QueueDeclare creates a queue and binds it to an exchange without starting a consumer.
+	// Useful for defining DLQs or Retry queues that use TTLs to automatically forward messages.
+	QueueDeclare(ctx context.Context, queueName, exchange, routingKey string, opts QueueOptions) error
+
 	BroadcastSubscribe(ctx context.Context, exchangeName string, handler Handler) error
 
 	Close() error

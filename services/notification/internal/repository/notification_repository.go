@@ -33,7 +33,7 @@ type NotificationRepository interface {
 	// CreateWithTx inserts a notification inside a caller-provided transaction.
 	CreateWithTx(tx *gorm.DB, notification *domain.Notification) (*domain.Notification, error)
 	ExistsByEventID(ctx context.Context, eventID string) (bool, error)
-	UpdateDeliveryStatus(ctx context.Context, notificationID uuid.UUID, status domain.NotificationStatus, errorMessage string, sentAt *time.Time) error
+	UpdateDeliveryStatus(ctx context.Context, notificationID uuid.UUID, status domain.NotificationStatus, errorMessage string, sentAt *time.Time, retryCount *int) error
 	ClaimPendingBatch(ctx context.Context, limit int) ([]*domain.Notification, error)
 	IncrementRetryAndReset(ctx context.Context, notificationID uuid.UUID, errorMessage string, nextRetryAt time.Time) error
 	List(ctx context.Context, filter NotificationFilter) ([]*domain.Notification, error)
@@ -70,7 +70,7 @@ func (r *notificationRepository) ExistsByEventID(ctx context.Context, eventID st
 	return count > 0, nil
 }
 
-func (r *notificationRepository) UpdateDeliveryStatus(ctx context.Context, notificationID uuid.UUID, status domain.NotificationStatus, errorMessage string, sentAt *time.Time) error {
+func (r *notificationRepository) UpdateDeliveryStatus(ctx context.Context, notificationID uuid.UUID, status domain.NotificationStatus, errorMessage string, sentAt *time.Time, retryCount *int) error {
 	updates := map[string]interface{}{
 		"status":        status,
 		"updated_at":    time.Now().UTC(),
@@ -84,6 +84,10 @@ func (r *notificationRepository) UpdateDeliveryStatus(ctx context.Context, notif
 
 	if sentAt != nil {
 		updates["sent_at"] = *sentAt
+	}
+
+	if retryCount != nil {
+		updates["retry_count"] = *retryCount
 	}
 
 	return r.db.WithContext(ctx).

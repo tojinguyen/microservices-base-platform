@@ -188,6 +188,25 @@ func (r *rabbitMQ) QueueSubscribeWithOptions(ctx context.Context, queueName, exc
 	return r.subscribeQueue(ctx, queueName, exchange, routingKey, handler, opts)
 }
 
+func (r *rabbitMQ) QueueDeclare(ctx context.Context, queueName, exchange, routingKey string, opts QueueOptions) error {
+	r.mu.RLock()
+	conn := r.conn
+	r.mu.RUnlock()
+
+	if conn == nil || conn.IsClosed() {
+		return errors.New("broker: connection is not open")
+	}
+
+	ch, err := conn.Channel()
+	if err != nil {
+		return err
+	}
+	defer ch.Close()
+
+	_, err = r.declareQueueAndExchange(ch, queueName, exchange, routingKey, opts)
+	return err
+}
+
 func (r *rabbitMQ) subscribeQueue(ctx context.Context, queueName, exchange, routingKey string, handler Handler, opts QueueOptions) error {
 	r.mu.RLock()
 	conn := r.conn
@@ -202,6 +221,42 @@ func (r *rabbitMQ) subscribeQueue(ctx context.Context, queueName, exchange, rout
 		return err
 	}
 
+	q, err := r.declareQueueAndExchange(ch, queueName, exchange, routingKey, opts)
+	if err != nil {
+		ch.Close()
+		return err
+	}
+
+	prefetch := opts.Prefetch
+	if prefetch <= 0 {
+		prefetch = 1
+	}
+	err = ch.Qos(prefetch, 0, false)
+	if err != nil {
+		ch.Close()
+		return err
+	}
+
+	msgs, err := ch.Consume(
+		q.Name,
+		"",    // consumer tag
+		false, // auto-ack
+		false, // exclusive
+		false, // no-local
+		false, // no-wait
+		nil,
+	)
+	if err != nil {
+		ch.Close()
+		return err
+	}
+
+	go r.handleMessages(ctx, ch, msgs, queueName, handler)
+
+	return nil
+}
+
+func (r *rabbitMQ) declareQueueAndExchange(ch *amqp.Channel, queueName, exchange, routingKey string, opts QueueOptions) (amqp.Queue, error) {
 	var queueArgs amqp.Table
 	if len(opts.QueueArgs) > 0 {
 		queueArgs = make(amqp.Table, len(opts.QueueArgs))
@@ -219,7 +274,7 @@ func (r *rabbitMQ) subscribeQueue(ctx context.Context, queueName, exchange, rout
 		queueArgs, // x-max-length etc.
 	)
 	if err != nil {
-		return err
+		return amqp.Queue{}, err
 	}
 
 	if exchange != "" {
@@ -233,7 +288,7 @@ func (r *rabbitMQ) subscribeQueue(ctx context.Context, queueName, exchange, rout
 			nil,
 		)
 		if err != nil {
-			return fmt.Errorf("failed to declare exchange: %w", err)
+			return amqp.Queue{}, fmt.Errorf("failed to declare exchange: %w", err)
 		}
 
 		err = ch.QueueBind(
@@ -244,35 +299,11 @@ func (r *rabbitMQ) subscribeQueue(ctx context.Context, queueName, exchange, rout
 			nil,
 		)
 		if err != nil {
-			return fmt.Errorf("failed to bind queue to exchange: %w", err)
+			return amqp.Queue{}, fmt.Errorf("failed to bind queue to exchange: %w", err)
 		}
 	}
 
-	prefetch := opts.Prefetch
-	if prefetch <= 0 {
-		prefetch = 1
-	}
-	err = ch.Qos(prefetch, 0, false)
-	if err != nil {
-		return err
-	}
-
-	msgs, err := ch.Consume(
-		q.Name,
-		"",    // consumer tag
-		false, // auto-ack
-		false, // exclusive
-		false, // no-local
-		false, // no-wait
-		nil,
-	)
-	if err != nil {
-		return err
-	}
-
-	go r.handleMessages(ctx, ch, msgs, queueName, handler)
-
-	return nil
+	return q, nil
 }
 
 func (r *rabbitMQ) BroadcastSubscribe(ctx context.Context, exchangeName string, handler Handler) error {

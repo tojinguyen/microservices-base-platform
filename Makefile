@@ -122,6 +122,7 @@ deploy-notification: build-notification
 		deployment/notification-api \
 		deployment/notification-worker-email \
 		deployment/notification-worker-webhook \
+		deployment/notification-worker-outbox \
 		-n microservices-platform
 
 # ==========================================

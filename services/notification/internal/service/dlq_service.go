@@ -103,7 +103,7 @@ func (s *dlqService) ReplayDLQMessage(ctx context.Context, idStr string) error {
 
 	// 5. Update original GORM notifications status back to pending/delivering
 	if msg.NotificationID != nil {
-		_ = s.notificationRepo.UpdateDeliveryStatus(ctx, *msg.NotificationID, domain.NotificationStatusPending, "Replayed from DLQ", nil)
+		_ = s.notificationRepo.UpdateDeliveryStatus(ctx, *msg.NotificationID, domain.NotificationStatusPending, "Replayed from DLQ", nil, nil)
 	}
 
 	return nil

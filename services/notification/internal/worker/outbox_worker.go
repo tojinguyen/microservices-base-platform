@@ -14,6 +14,7 @@ import (
 	"github.com/tojinguyen/notification/internal/repository"
 	"go.opentelemetry.io/otel"
 	"go.uber.org/zap"
+	"gorm.io/gorm"
 )
 
 type OutboxWorker interface {
@@ -21,16 +22,20 @@ type OutboxWorker interface {
 }
 
 type outboxWorker struct {
-	outboxRepo repository.OutboxRepository
-	broker     broker.Broker
-	cfg        *config.Config
+	db               *gorm.DB
+	outboxRepo       repository.OutboxRepository
+	notificationRepo repository.NotificationRepository
+	broker           broker.Broker
+	cfg              *config.Config
 }
 
-func NewOutboxWorker(outboxRepo repository.OutboxRepository, broker broker.Broker, cfg *config.Config) OutboxWorker {
+func NewOutboxWorker(db *gorm.DB, outboxRepo repository.OutboxRepository, notificationRepo repository.NotificationRepository, broker broker.Broker, cfg *config.Config) OutboxWorker {
 	return &outboxWorker{
-		outboxRepo: outboxRepo,
-		broker:     broker,
-		cfg:        cfg,
+		db:               db,
+		outboxRepo:       outboxRepo,
+		notificationRepo: notificationRepo,
+		broker:           broker,
+		cfg:              cfg,
 	}
 }
 
@@ -97,8 +102,19 @@ func (w *outboxWorker) publishEvent(ctx context.Context, event *domain.OutboxEve
 		)
 
 		if event.RetryCount+1 >= w.cfg.Worker.OutboxMaxRetries {
-			if markErr := w.outboxRepo.MarkFailed(ctx, event.ID, err.Error()); markErr != nil {
-				log.Error("outbox: failed to mark event as failed", zap.String("event_id", event.ID.String()), zap.Error(markErr))
+			errTx := w.db.Transaction(func(tx *gorm.DB) error {
+				outboxRepoTx := repository.NewOutboxRepository(tx)
+				if markErr := outboxRepoTx.MarkFailed(ctx, event.ID, err.Error()); markErr != nil {
+					return markErr
+				}
+				notificationRepoTx := repository.NewNotificationRepository(tx)
+				if updateErr := notificationRepoTx.UpdateDeliveryStatus(ctx, event.AggregateID, domain.NotificationStatusFailed, "outbox publish failed: "+err.Error(), nil, nil); updateErr != nil {
+					return updateErr
+				}
+				return nil
+			})
+			if errTx != nil {
+				log.Error("outbox: failed to mark event and notification as failed in transaction", zap.String("event_id", event.ID.String()), zap.Error(errTx))
 			}
 			return
 		}
@@ -110,8 +126,6 @@ func (w *outboxWorker) publishEvent(ctx context.Context, event *domain.OutboxEve
 	}
 
 	if err := w.outboxRepo.MarkPublished(ctx, event.ID); err != nil {
-		// Event was published to broker but we couldn't mark it — worker will re-publish on next
-		// poll tick. Consumer deduplication (Redis SETNX on event_id) handles the duplicate.
 		log.Error("outbox: published to broker but failed to mark as published",
 			zap.String("event_id", event.ID.String()),
 			zap.Error(err),

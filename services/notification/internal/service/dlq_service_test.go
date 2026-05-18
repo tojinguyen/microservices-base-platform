@@ -54,7 +54,7 @@ type mockNotificationRepository struct {
 	mock.Mock
 }
 
-func (m *mockNotificationRepository) UpdateDeliveryStatus(ctx context.Context, id uuid.UUID, status domain.NotificationStatus, errMsg string, sentAt *time.Time) error {
+func (m *mockNotificationRepository) UpdateDeliveryStatus(ctx context.Context, id uuid.UUID, status domain.NotificationStatus, errMsg string, sentAt *time.Time, retryCount *int) error {
 	args := m.Called(ctx, id, status, errMsg, sentAt)
 	return args.Error(0)
 }
@@ -125,7 +125,7 @@ func TestReplayDLQMessage_Success(t *testing.T) {
 	b.On("Publish", mock.Anything, "notification.direct", "email", expectedTask).Return(nil)
 
 	repo.On("UpdateStatus", mock.Anything, id, domain.DLQStatusReplayed).Return(nil)
-	notiRepo.On("UpdateDeliveryStatus", mock.Anything, notiID, domain.NotificationStatusPending, "Replayed from DLQ", mock.Anything).Return(nil)
+	notiRepo.On("UpdateDeliveryStatus", mock.Anything, notiID, domain.NotificationStatusPending, "Replayed from DLQ", mock.Anything, mock.Anything).Return(nil)
 
 	err := svc.ReplayDLQMessage(context.Background(), id.String())
 	assert.NoError(t, err)

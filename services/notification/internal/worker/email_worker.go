@@ -51,6 +51,11 @@ func (w *EmailWorker) Start(ctx context.Context) {
 	log := logger.L()
 	log.Info("Email worker started")
 
+	// Declare the Retry Queue automatically so it doesn't need to be created manually
+	if err := w.declareRetryQueue(ctx); err != nil {
+		log.Error("Failed to declare retry queue", zap.Error(err))
+	}
+
 	// Regular notification queue with DLQ options.
 	go func() {
 		opts := broker.QueueOptions{
@@ -82,6 +87,24 @@ func (w *EmailWorker) Start(ctx context.Context) {
 
 	<-ctx.Done()
 	log.Info("Email worker stopping")
+}
+
+// declareRetryQueue ensures the retry exchange and queue are created with the proper DLX config.
+// Messages sent here will sit for the TTL, then RabbitMQ routes them back to the main exchange.
+func (w *EmailWorker) declareRetryQueue(ctx context.Context) error {
+	retryExchange := w.cfg.Queue.Exchange + ".retry"
+	retryQueue := "email.retry"
+	retryRoutingKey := string(domain.ChannelEmail) + ".retry"
+
+	opts := broker.QueueOptions{
+		QueueArgs: map[string]interface{}{
+			"x-dead-letter-exchange":    w.cfg.Queue.Exchange,
+			"x-dead-letter-routing-key": string(domain.ChannelEmail),
+			"x-message-ttl":             int32(60000), // Base TTL of 60 seconds (can be overridden per message if needed)
+		},
+	}
+
+	return w.broker.QueueDeclare(ctx, retryQueue, retryExchange, retryRoutingKey, opts)
 }
 
 func (w *EmailWorker) HandleMessage(ctx context.Context, body []byte) error {
@@ -137,12 +160,12 @@ func (w *EmailWorker) HandleMessage(ctx context.Context, body []byte) error {
 			return nil // Return nil to ACK current message on main queue
 		} else {
 			log.Error("Max retries reached, marking as failed", zap.String("notification_id", task.NotificationID))
-			w.repo.UpdateDeliveryStatus(ctx, notificationID, domain.NotificationStatusFailed, err.Error(), nil)
+			w.repo.UpdateDeliveryStatus(ctx, notificationID, domain.NotificationStatusFailed, err.Error(), nil, &task.RetryCount)
 			return broker.ErrRejectToDLQ // Rejects message to DLQ natively via RabbitMQ
 		}
 	}
 
-	err = w.repo.UpdateDeliveryStatus(ctx, notificationID, domain.NotificationStatusDelivering, "Waiting for webhook confirmation", nil)
+	err = w.repo.UpdateDeliveryStatus(ctx, notificationID, domain.NotificationStatusDelivering, "Waiting for webhook confirmation", nil, &task.RetryCount)
 	if err != nil {
 		log.Error("Failed to update notification status to delivering", zap.Error(err))
 	}

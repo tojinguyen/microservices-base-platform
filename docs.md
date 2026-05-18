@@ -10,8 +10,9 @@
 - Grafana Dashboard: [http://localhost/grafana](http://localhost/grafana)
   - Account: `admin`
   - Password: `admin123`
+- Jaeger UI (Distributed Tracing): [http://localhost:16686](http://localhost:16686)
 
-## Database & Cache GUI Tools
+## Database, Cache & Message Broker GUI Tools
 
 > Yêu cầu thêm vào hosts file một lần (`C:\Windows\System32\drivers\etc\hosts`):
 > ```
@@ -20,6 +21,8 @@
 > ```
 
 - **CloudBeaver** (PostgreSQL): [http://cloudbeaver.localhost](http://cloudbeaver.localhost) — web DBeaver
+  - Account: `admin`
+  - Password: `password123`
 
   | | Identity DB | Notification DB |
   |---|---|---|
@@ -34,6 +37,10 @@
 - **RedisInsight** (Redis): [http://redisinsight.localhost](http://redisinsight.localhost)
   - Identity Redis: host `redis-identity-service`, port `6379`
   - Notification Redis: host `redis-notification-service`, port `6379`
+
+- **RabbitMQ Management UI**: [http://localhost:15672](http://localhost:15672)
+  - Username: `guest`
+  - Password: `guest`
 
 > Thêm vào hosts file một lần (`C:\Windows\System32\drivers\etc\hosts`):
 > ```

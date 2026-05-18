@@ -59,7 +59,7 @@ data:
                 schema: "${CLOUDBEAVER_DB_SCHEMA:''}",
                 user: "${CLOUDBEAVER_DB_USER:''}",
                 password: "${CLOUDBEAVER_DB_PASSWORD:''}",
-                initialDataConfiguration: "${CLOUDBEAVER_DB_INITIAL_DATA:conf/initial-data.conf}",
+                initialDataConfiguration: "${CLOUDBEAVER_DB_INITIAL_DATA:/opt/cloudbeaver/conf/initial-data.conf}",
                 pool: {
                     minIdleConnections: "${CLOUDBEAVER_DB_MIN_IDLE_CONNECTIONS:4}",
                     maxIdleConnections: "${CLOUDBEAVER_DB_MAX_IDLE_CONNECTIONS:10}",
@@ -74,7 +74,7 @@ data:
             anonymousAccessEnabled: "${CLOUDBEAVER_APP_ANONYMOUS_ACCESS_ENABLED:true}",
             anonymousUserRole: "user",
             defaultUserTeam: "${CLOUDBEAVER_APP_DEFAULT_USER_TEAM:user}",
-            grantConnectionsAccessToAnonymousTeam: "${CLOUDBEAVER_APP_GRANT_CONNECTIONS_ACCESS_TO_ANONYMOUS_TEAM:false}",
+            grantConnectionsAccessToAnonymousTeam: "${CLOUDBEAVER_APP_GRANT_CONNECTIONS_ACCESS_TO_ANONYMOUS_TEAM:true}",
             supportsCustomConnections: true,
             showReadOnlyConnectionInfo: "${CLOUDBEAVER_APP_READ_ONLY_CONNECTION_INFO:false}",
             systemVariablesResolvingEnabled: "${CLOUDBEAVER_SYSTEM_VARIABLES_RESOLVING_ENABLED:false}",
