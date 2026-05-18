@@ -88,8 +88,6 @@ func main() {
 	log.Info("Starting notification service", zap.String("mode", cfg.AppMode))
 
 	switch cfg.AppMode {
-	case notificationConfig.ModeWorkerPending:
-		runPendingWorker(ctx, cfg, database)
 	case notificationConfig.ModeWorkerEmail:
 		runEmailWorker(ctx, cfg, database)
 	case notificationConfig.ModeWorkerWebhook:
@@ -185,20 +183,7 @@ func runAPI(ctx context.Context, cfg *notificationConfig.Config, database *gorm.
 	log.Info("API server gracefully stopped")
 }
 
-func runPendingWorker(ctx context.Context, cfg *notificationConfig.Config, database *gorm.DB) {
-	log := logger.L()
-	brokerClient, err := broker.NewRabbitMQ(cfg.Broker)
-	if err != nil {
-		log.Panic("failed to connect to broker", zap.Error(err))
-	}
-	defer brokerClient.Close()
 
-	notificationRepo := repository.NewNotificationRepository(database)
-	pendingWorker := worker.NewNotificationWorker(notificationRepo, brokerClient, cfg)
-
-	log.Info("Pending worker starting")
-	pendingWorker.Start(ctx)
-}
 
 func runEmailWorker(ctx context.Context, cfg *notificationConfig.Config, database *gorm.DB) {
 	log := logger.L()

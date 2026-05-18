@@ -106,42 +106,6 @@ spec:
             periodSeconds: 30
             failureThreshold: 3
 
----
-# 4. Deployment B: Worker xử lý Pending notifications từ DB → RabbitMQ queue
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: notification-worker-pending
-  namespace: microservices-platform
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: notification-worker-pending
-  template:
-    metadata:
-      labels:
-        app: notification-worker-pending
-    spec:
-      containers:
-        - name: notification-worker-pending
-          image: notification-service:latest
-          imagePullPolicy: IfNotPresent
-          resources:
-            requests:
-              memory: "64Mi"
-              cpu: "50m"
-            limits:
-              memory: "128Mi"
-              cpu: "200m"
-          envFrom:
-            - configMapRef:
-                name: notification-config
-            - secretRef:
-                name: notification-secret
-          env:
-            - name: APP_MODE
-              value: "worker-pending"
 
 ---
 # 5. Deployment C: Worker gửi Email (consume từ RabbitMQ → SMTP)

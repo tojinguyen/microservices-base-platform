@@ -130,22 +130,6 @@ services:
       - OTEL_ENABLED=true
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
 
-  notification-worker-pending:
-    image: notification-service
-    container_name: notification-worker-pending
-    depends_on:
-      postgres-notification:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-      jaeger:
-        condition: service_started
-    env_file:
-      - services/notification/.env
-    environment:
-      - APP_MODE=worker-pending
-      - OTEL_ENABLED=true
-      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
 
   notification-worker-email:
     image: notification-service

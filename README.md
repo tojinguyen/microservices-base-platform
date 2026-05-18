@@ -14,9 +14,9 @@ Ingress (nginx)
 identity-service  → postgres-identity
                   → redis (JWT)
 
-notification-service (API + 3 Workers)
+notification-service (API + Workers)
     ├── notification-api         → postgres-notification, rabbitmq, mailpit
-    ├── notification-worker-pending
+    ├── notification-worker-outbox
     ├── notification-worker-email
     └── notification-worker-webhook
 ```
@@ -122,6 +122,6 @@ k8s/
 ├── 06_postgres_notification.yaml # PostgreSQL cho Notification
 ├── 07_rabbitmq.yaml             # RabbitMQ
 ├── 08_mailpit.yaml              # Mailpit (SMTP test)
-├── 09_notification.yaml         # Notification Service (API + 3 Workers)
+├── 09_notification.yaml         # Notification Service (API + Workers)
 └── 10_ingress.yaml              # Nginx Ingress rules
 ```

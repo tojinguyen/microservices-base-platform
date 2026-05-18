@@ -121,7 +121,6 @@ deploy-notification: build-notification
 	kubectl rollout restart \
 		deployment/notification-api \
 		deployment/notification-worker-email \
-		deployment/notification-worker-pending \
 		deployment/notification-worker-webhook \
 		-n microservices-platform
 

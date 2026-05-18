@@ -56,9 +56,9 @@ func (w *outboxWorker) Start(ctx context.Context) {
 func (w *outboxWorker) processBatch(ctx context.Context) {
 	log := logger.L()
 
-	events, err := w.outboxRepo.FetchPending(ctx, w.cfg.Worker.OutboxBatchSize)
+	events, err := w.outboxRepo.ClaimPendingBatch(ctx, w.cfg.Worker.OutboxBatchSize)
 	if err != nil {
-		log.Error("outbox: failed to fetch pending events", zap.Error(err))
+		log.Error("outbox: failed to claim pending events", zap.Error(err))
 		return
 	}
 

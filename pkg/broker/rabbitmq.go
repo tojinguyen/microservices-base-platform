@@ -6,30 +6,136 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"sync"
+	"time"
+
+	"backend/pkg/trace"
 
 	amqp "github.com/rabbitmq/amqp091-go"
-	"backend/pkg/trace"
 )
 
+type subscription struct {
+	queueName   string
+	exchange    string
+	routingKey  string
+	handler     Handler
+	opts        QueueOptions
+	isBroadcast bool
+}
+
 type rabbitMQ struct {
-	conn *amqp.Connection
+	cfg       Config
+	mu        sync.RWMutex
+	conn      *amqp.Connection
+	closed    bool
+	subs      []subscription
+	closeChan chan *amqp.Error
 }
 
 func NewRabbitMQ(cfg Config) (Broker, error) {
-	url := fmt.Sprintf("amqp://%s:%s@%s:%d/", cfg.User, cfg.Password, cfg.Host, cfg.Port)
+	r := &rabbitMQ{
+		cfg: cfg,
+	}
 
-	conn, err := amqp.Dial(url)
-	if err != nil {
+	if err := r.connect(); err != nil {
 		return nil, fmt.Errorf("failed to connect to RabbitMQ: %w", err)
 	}
 
-	return &rabbitMQ{
-		conn: conn,
-	}, nil
+	go r.handleReconnect()
+
+	return r, nil
+}
+
+func (r *rabbitMQ) connect() error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	url := fmt.Sprintf("amqp://%s:%s@%s:%d/", r.cfg.User, r.cfg.Password, r.cfg.Host, r.cfg.Port)
+	conn, err := amqp.Dial(url)
+	if err != nil {
+		return err
+	}
+
+	r.conn = conn
+	r.closeChan = make(chan *amqp.Error, 1)
+	r.conn.NotifyClose(r.closeChan)
+
+	return nil
+}
+
+func (r *rabbitMQ) handleReconnect() {
+	err, ok := <-r.closeChan
+	if !ok {
+		r.mu.RLock()
+		closed := r.closed
+		r.mu.RUnlock()
+		if closed {
+			return
+		}
+	}
+
+	log.Printf("RabbitMQ connection closed: %v. Initiating reconnect...", err)
+	r.reestablish()
+}
+
+func (r *rabbitMQ) reestablish() {
+	backoff := 2 * time.Second
+	maxBackoff := 60 * time.Second
+
+	for {
+		r.mu.RLock()
+		if r.closed {
+			r.mu.RUnlock()
+			return
+		}
+		r.mu.RUnlock()
+
+		log.Printf("Attempting to reconnect to RabbitMQ in %s...", backoff)
+		time.Sleep(backoff)
+
+		if err := r.connect(); err != nil {
+			log.Printf("Failed to reconnect to RabbitMQ: %v", err)
+			backoff *= 2
+			if backoff > maxBackoff {
+				backoff = maxBackoff
+			}
+			continue
+		}
+
+		log.Println("Successfully re-connected to RabbitMQ. Re-establishing subscriptions...")
+
+		r.mu.RLock()
+		subs := make([]subscription, len(r.subs))
+		copy(subs, r.subs)
+		r.mu.RUnlock()
+
+		for _, sub := range subs {
+			var err error
+			if sub.isBroadcast {
+				err = r.subscribeBroadcast(context.Background(), sub.exchange, sub.handler)
+			} else {
+				err = r.subscribeQueue(context.Background(), sub.queueName, sub.exchange, sub.routingKey, sub.handler, sub.opts)
+			}
+			if err != nil {
+				log.Printf("Failed to restore subscription for exchange=%s queue=%s: %v", sub.exchange, sub.queueName, err)
+			}
+		}
+
+		go r.handleReconnect()
+		return
+	}
 }
 
 func (r *rabbitMQ) Publish(ctx context.Context, exchange, routingKey string, body interface{}) error {
-	ch, err := r.conn.Channel()
+	r.mu.RLock()
+	conn := r.conn
+	r.mu.RUnlock()
+
+	if conn == nil || conn.IsClosed() {
+		return errors.New("broker: connection is not open")
+	}
+
+	ch, err := conn.Channel()
 	if err != nil {
 		return err
 	}
@@ -68,7 +174,30 @@ func (r *rabbitMQ) QueueSubscribe(ctx context.Context, queueName, exchange, rout
 }
 
 func (r *rabbitMQ) QueueSubscribeWithOptions(ctx context.Context, queueName, exchange, routingKey string, handler Handler, opts QueueOptions) error {
-	ch, err := r.conn.Channel()
+	r.mu.Lock()
+	r.subs = append(r.subs, subscription{
+		queueName:   queueName,
+		exchange:    exchange,
+		routingKey:  routingKey,
+		handler:     handler,
+		opts:        opts,
+		isBroadcast: false,
+	})
+	r.mu.Unlock()
+
+	return r.subscribeQueue(ctx, queueName, exchange, routingKey, handler, opts)
+}
+
+func (r *rabbitMQ) subscribeQueue(ctx context.Context, queueName, exchange, routingKey string, handler Handler, opts QueueOptions) error {
+	r.mu.RLock()
+	conn := r.conn
+	r.mu.RUnlock()
+
+	if conn == nil || conn.IsClosed() {
+		return errors.New("broker: connection is not open")
+	}
+
+	ch, err := conn.Channel()
 	if err != nil {
 		return err
 	}
@@ -147,7 +276,27 @@ func (r *rabbitMQ) QueueSubscribeWithOptions(ctx context.Context, queueName, exc
 }
 
 func (r *rabbitMQ) BroadcastSubscribe(ctx context.Context, exchangeName string, handler Handler) error {
-	ch, err := r.conn.Channel()
+	r.mu.Lock()
+	r.subs = append(r.subs, subscription{
+		exchange:    exchangeName,
+		handler:     handler,
+		isBroadcast: true,
+	})
+	r.mu.Unlock()
+
+	return r.subscribeBroadcast(ctx, exchangeName, handler)
+}
+
+func (r *rabbitMQ) subscribeBroadcast(ctx context.Context, exchangeName string, handler Handler) error {
+	r.mu.RLock()
+	conn := r.conn
+	r.mu.RUnlock()
+
+	if conn == nil || conn.IsClosed() {
+		return errors.New("broker: connection is not open")
+	}
+
+	ch, err := conn.Channel()
 	if err != nil {
 		return err
 	}
@@ -228,7 +377,7 @@ func (r *rabbitMQ) handleMessages(ctx context.Context, ch *amqp.Channel, msgs <-
 					d.Nack(false, false) // requeue = false -> RabbitMQ moves to DLQ
 				} else {
 					log.Printf("Error processing message, requeueing... Error: %v", err)
-					d.Nack(false, true)  // requeue = true
+					d.Nack(false, true) // requeue = true
 				}
 			} else {
 				d.Ack(false)
@@ -238,6 +387,10 @@ func (r *rabbitMQ) handleMessages(ctx context.Context, ch *amqp.Channel, msgs <-
 }
 
 func (r *rabbitMQ) Close() error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.closed = true
 	if r.conn != nil {
 		return r.conn.Close()
 	}

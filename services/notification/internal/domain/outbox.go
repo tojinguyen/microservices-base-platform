@@ -9,9 +9,10 @@ import (
 type OutboxStatus string
 
 const (
-	OutboxStatusPending   OutboxStatus = "pending"
-	OutboxStatusPublished OutboxStatus = "published"
-	OutboxStatusFailed    OutboxStatus = "failed"
+	OutboxStatusPending    OutboxStatus = "pending"
+	OutboxStatusProcessing OutboxStatus = "processing"
+	OutboxStatusPublished  OutboxStatus = "published"
+	OutboxStatusFailed     OutboxStatus = "failed"
 )
 
 type OutboxEvent struct {
