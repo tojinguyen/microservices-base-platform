@@ -8,6 +8,7 @@ import (
 	"log"
 
 	amqp "github.com/rabbitmq/amqp091-go"
+	"backend/pkg/trace"
 )
 
 type rabbitMQ struct {
@@ -39,6 +40,10 @@ func (r *rabbitMQ) Publish(ctx context.Context, exchange, routingKey string, bod
 		return fmt.Errorf("failed to marshal message: %w", err)
 	}
 
+	// Inject trace context vào AMQP headers để truyền qua RabbitMQ broker
+	headers := make(amqp.Table)
+	trace.InjectAMQP(ctx, headers)
+
 	err = ch.PublishWithContext(ctx,
 		exchange,   // Exchange name
 		routingKey, // Routing key (Empty if using Fanout)
@@ -47,6 +52,7 @@ func (r *rabbitMQ) Publish(ctx context.Context, exchange, routingKey string, bod
 		amqp.Publishing{
 			ContentType:  "application/json",
 			DeliveryMode: amqp.Persistent, // Messages will be persisted to disk
+			Headers:      headers,
 			Body:         data,
 		},
 	)
@@ -212,7 +218,9 @@ func (r *rabbitMQ) handleMessages(ctx context.Context, ch *amqp.Channel, msgs <-
 				return
 			}
 
-			err := handler(ctx, d.Body)
+			// Extract trace context từ AMQP headers để tiếp tục chuỗi trace
+			msgCtx := trace.ExtractAMQP(ctx, d.Headers)
+			err := handler(msgCtx, d.Body)
 
 			if err != nil {
 				if errors.Is(err, ErrRejectToDLQ) {

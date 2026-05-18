@@ -76,6 +76,16 @@ services:
       - "1025:1025"
       - "8025:8025"
 
+  jaeger:
+    image: jaegertracing/all-in-one:1.57
+    container_name: platform-jaeger
+    ports:
+      - "16686:16686"   # Jaeger UI — http://localhost:16686
+      - "4317:4317"     # OTLP gRPC
+      - "4318:4318"     # OTLP HTTP
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+
   identity-service:
     image: identity-service
     build:
@@ -111,10 +121,14 @@ services:
         condition: service_healthy
       mailpit:
         condition: service_started
+      jaeger:
+        condition: service_started
     env_file:
       - services/notification/.env
     environment:
       - APP_MODE=api
+      - OTEL_ENABLED=true
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
 
   notification-worker-pending:
     image: notification-service
@@ -124,10 +138,14 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+      jaeger:
+        condition: service_started
     env_file:
       - services/notification/.env
     environment:
       - APP_MODE=worker-pending
+      - OTEL_ENABLED=true
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
 
   notification-worker-email:
     image: notification-service
@@ -139,10 +157,14 @@ services:
         condition: service_started
       postgres-notification:
         condition: service_healthy
+      jaeger:
+        condition: service_started
     env_file:
       - services/notification/.env
     environment:
       - APP_MODE=worker-email
+      - OTEL_ENABLED=true
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
 
   notification-worker-webhook:
     image: notification-service
@@ -154,10 +176,14 @@ services:
         condition: service_started
       postgres-notification:
         condition: service_healthy
+      jaeger:
+        condition: service_started
     env_file:
       - services/notification/.env
     environment:
       - APP_MODE=worker-webhook
+      - OTEL_ENABLED=true
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
 
 volumes:
   postgres_data:

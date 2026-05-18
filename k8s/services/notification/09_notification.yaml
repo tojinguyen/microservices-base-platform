@@ -36,6 +36,8 @@ data:
   WORKER_OUTBOX_INTERVAL: "2"
   WORKER_OUTBOX_BATCH_SIZE: "100"
   WORKER_OUTBOX_MAX_RETRIES: "5"
+  OTEL_ENABLED: "true"
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://jaeger-service:4318"
 
 ---
 # 2. Service: Expose Notification API để các service khác gọi vào
