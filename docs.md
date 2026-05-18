@@ -10,7 +10,7 @@
 - Grafana Dashboard: [http://localhost/grafana](http://localhost/grafana)
   - Account: `admin`
   - Password: `admin123`
-- Jaeger UI (Distributed Tracing): [http://localhost:16686](http://localhost:16686)
+- Jaeger UI (Distributed Tracing): [http://jaeger.localhost](http://jaeger.localhost)
 
 ## Database, Cache & Message Broker GUI Tools
 
@@ -38,7 +38,7 @@
   - Identity Redis: host `redis-identity-service`, port `6379`
   - Notification Redis: host `redis-notification-service`, port `6379`
 
-- **RabbitMQ Management UI**: [http://localhost:15672](http://localhost:15672)
+- **RabbitMQ Management UI**: [http://rabbitmq.localhost](http://rabbitmq.localhost)
   - Username: `guest`
   - Password: `guest`
 
@@ -46,5 +46,7 @@
 > ```
 > 127.0.0.1 cloudbeaver.localhost
 > 127.0.0.1 redisinsight.localhost
+> 127.0.0.1 jaeger.localhost
+> 127.0.0.1 rabbitmq.localhost
 > ```
 

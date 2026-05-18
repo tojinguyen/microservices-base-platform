@@ -111,6 +111,7 @@ data:
     {
       "adminName": "admin",
       "adminPassword": "password123",
+      "configurationMode": false,
       "teams": [
         {
           "subjectId": "admin-team",

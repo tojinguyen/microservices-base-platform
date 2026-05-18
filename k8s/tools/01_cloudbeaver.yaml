@@ -32,15 +32,19 @@ spec:
     spec:
       containers:
         - name: cloudbeaver
-          image: dbeaver/cloudbeaver:latest
+          image: dbeaver/cloudbeaver:23.3.5
           ports:
             - containerPort: 8978
           env:
             - name: CLOUDBEAVER_FORCE_HTTPS
               value: "false"
+            - name: CB_ADMIN_NAME
+              value: "admin"
+            - name: CB_ADMIN_PASSWORD
+              value: "password123"
           volumeMounts:
             - name: cloudbeaver-data
-              mountPath: /opt/cloudbeaver/workspace
+              mountPath: /opt/cloudbeaver/workspace/.data
             - name: cloudbeaver-config-volume
               mountPath: /opt/cloudbeaver/conf/cloudbeaver.conf
               subPath: cloudbeaver.conf
