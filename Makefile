@@ -87,7 +87,7 @@ k8s-destroy:
 	@echo "Cluster destroyed."
 
 # Internal: full bootstrap called by k8s-up on first cluster creation
-setup-all: ingress-install prometheus-install loki-install dashboard-apply deploy tools-deploy
+setup-all: ingress-install prometheus-install dashboard-apply loki-install deploy tools-deploy
 	@echo "=========================================="
 	@echo " Full setup completed!"
 	@echo " Grafana:      http://localhost/grafana  (admin/admin123)"
@@ -139,10 +139,16 @@ loki-install:
 	@echo "Installing Loki Stack via Helm..."
 	helm repo add grafana https://grafana.github.io/helm-charts || true
 	helm repo update grafana || echo "Warning: repo update failed, using cached charts"
+	@echo "Ensuring monitoring namespace exists before applying ConfigMaps..."
+	kubectl create namespace monitoring --dry-run=client -o yaml | kubectl apply -f -
+	@echo "Applying Grafana dashboard ConfigMap before Helm install..."
+	kubectl apply -f k8s/monitoring/grafana-logs-dashboard.yaml
 	helm upgrade --install loki grafana/loki-stack \
 		--namespace monitoring \
 		--create-namespace \
 		-f helm-values/loki-values.yaml
+	@echo "Waiting for Grafana to be ready..."
+	kubectl rollout status deployment/loki-grafana -n monitoring --timeout=180s
 
 loki-uninstall:
 	@echo "Uninstalling Loki Stack..."
@@ -157,7 +163,10 @@ monitoring-upgrade:
 	@echo "Config upgraded. Grafana will reload dashboards after ~30s."
 
 # Apply Grafana dashboard ConfigMap without a full Helm upgrade
+# NOTE: Also called standalone to update dashboards on a running cluster
 dashboard-apply:
+	@echo "Ensuring monitoring namespace exists..."
+	kubectl create namespace monitoring --dry-run=client -o yaml | kubectl apply -f -
 	@echo "Applying Grafana Logs dashboard ConfigMap..."
 	kubectl apply -f k8s/monitoring/grafana-logs-dashboard.yaml
 	@echo "Dashboard applied. Go to: http://localhost/grafana -> Dashboards -> Microservices"
