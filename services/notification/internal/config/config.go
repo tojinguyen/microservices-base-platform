@@ -29,6 +29,16 @@ type Config struct {
 	Queue      QueueConfig     `mapstructure:"queue"`
 	Worker     WorkerConfig    `mapstructure:"worker"`
 	RateLimit  RateLimitConfig `mapstructure:"rate_limit"`
+	Otel       OtelConfig      `mapstructure:"otel"`
+}
+
+// OtelConfig chứa cấu hình OpenTelemetry Distributed Tracing.
+type OtelConfig struct {
+	// Enabled bật/tắt tính năng tracing. Mặc định: true.
+	Enabled bool `mapstructure:"enabled"`
+	// ExporterEndpoint là địa chỉ của OTLP collector (Jaeger).
+	// Ví dụ: "http://jaeger:4318" (docker) hoặc "http://jaeger-service:4318" (k8s).
+	ExporterEndpoint string `mapstructure:"exporter_endpoint"`
 }
 
 type SMTPConfig struct {

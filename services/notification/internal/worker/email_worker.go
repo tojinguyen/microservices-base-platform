@@ -16,6 +16,8 @@ import (
 	"github.com/tojinguyen/notification/internal/domain"
 	"github.com/tojinguyen/notification/internal/dto"
 	"github.com/tojinguyen/notification/internal/repository"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"go.uber.org/zap"
 )
 
@@ -83,6 +85,11 @@ func (w *EmailWorker) Start(ctx context.Context) {
 }
 
 func (w *EmailWorker) HandleMessage(ctx context.Context, body []byte) error {
+	// Context đã chứa trace từ RabbitMQ (broker tự động extract khi consume message)
+	tracer := otel.Tracer("notification-service")
+	ctx, span := tracer.Start(ctx, "worker.email.process")
+	defer span.End()
+
 	log := logger.L()
 	var task dto.NotificationTask
 	if err := json.Unmarshal(body, &task); err != nil {
@@ -90,12 +97,17 @@ func (w *EmailWorker) HandleMessage(ctx context.Context, body []byte) error {
 		return broker.ErrRejectToDLQ // Reject to DLQ immediately on malformed payload
 	}
 
+	span.SetAttributes(
+		attribute.String("notification.id", task.NotificationID),
+		attribute.String("notification.recipient", task.Recipient),
+	)
+
 	log.Info("Sending email",
 		zap.String("notification_id", task.NotificationID),
 		zap.String("recipient", task.Recipient),
 	)
 
-	err := w.sendEmail(task.NotificationID, task.Recipient, task.Data["subject"], task.Data["content"])
+	err := w.sendEmail(ctx, task.NotificationID, task.Recipient, task.Data["subject"], task.Data["content"])
 
 	if errors.Is(err, ErrCircuitBreakerOpen) {
 		log.Warn("Circuit breaker is open, skipping email send", zap.String("notification_id", task.NotificationID))
@@ -159,7 +171,7 @@ func (w *EmailWorker) HandleCampaignMessage(ctx context.Context, body []byte) er
 	// Use "campaign:<campaignID>:<userID>" as the X-Notification-ID header so Mailpit
 	// webhooks can be linked back even without a pre-existing notifications row.
 	emailID := fmt.Sprintf("campaign:%s:%s", task.CampaignID, task.UserID)
-	sendErr := w.sendEmail(emailID, task.Recipient, task.Subject, task.Content)
+	sendErr := w.sendEmail(ctx, emailID, task.Recipient, task.Subject, task.Content)
 
 	if errors.Is(sendErr, ErrCircuitBreakerOpen) {
 		log.Warn("circuit breaker open, NACK campaign message",
@@ -235,10 +247,19 @@ func retryDelay(retryCount int) time.Duration {
 	return delays[len(delays)-1]
 }
 
-func (w *EmailWorker) sendEmail(id, to, subject, body string) error {
+func (w *EmailWorker) sendEmail(ctx context.Context, id, to, subject, body string) error {
 	if to == "" {
 		return fmt.Errorf("recipient email address is empty")
 	}
+
+	// Span đo lường chính xác thời gian kết nối và gửi qua SMTP
+	tracer := otel.Tracer("notification-service")
+	_, span := tracer.Start(ctx, "worker.email.send_smtp")
+	defer span.End()
+	span.SetAttributes(
+		attribute.String("smtp.recipient", to),
+		attribute.String("smtp.host", w.cfg.SMTP.Host),
+	)
 
 	return w.circuitBreaker.Execute(func() error {
 		smtpCfg := w.cfg.SMTP

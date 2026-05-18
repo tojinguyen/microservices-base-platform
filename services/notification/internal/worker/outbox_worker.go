@@ -2,14 +2,17 @@ package worker
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	"backend/pkg/broker"
 	"backend/pkg/logger"
+	"backend/pkg/trace"
 
 	"github.com/tojinguyen/notification/internal/config"
 	"github.com/tojinguyen/notification/internal/domain"
 	"github.com/tojinguyen/notification/internal/repository"
+	"go.opentelemetry.io/otel"
 	"go.uber.org/zap"
 )
 
@@ -67,7 +70,24 @@ func (w *outboxWorker) processBatch(ctx context.Context) {
 func (w *outboxWorker) publishEvent(ctx context.Context, event *domain.OutboxEvent) {
 	log := logger.L()
 
-	if err := w.broker.Publish(ctx, w.cfg.Queue.Exchange, event.RoutingKey, event.Payload); err != nil {
+	// Giải mã payload để lấy trace_context và khôi phục chuỗi trace từ HTTP request gốc
+	var payloadMap map[string]json.RawMessage
+	traceCtx := ctx
+	if err := json.Unmarshal(event.Payload, &payloadMap); err == nil {
+		if rawTraceCtx, ok := payloadMap["trace_context"]; ok {
+			var traceMap map[string]string
+			if err := json.Unmarshal(rawTraceCtx, &traceMap); err == nil && len(traceMap) > 0 {
+				traceCtx = trace.ExtractMap(ctx, traceMap)
+			}
+		}
+	}
+
+	// Tạo child span cho bước publish - trace sẽ tiếp tục từ context đã khôi phục phía trên
+	tracer := otel.Tracer("notification-service")
+	traceCtx, span := tracer.Start(traceCtx, "outbox.publish")
+	defer span.End()
+
+	if err := w.broker.Publish(traceCtx, w.cfg.Queue.Exchange, event.RoutingKey, event.Payload); err != nil {
 		log.Error("outbox: failed to publish event",
 			zap.String("event_id", event.ID.String()),
 			zap.String("aggregate_id", event.AggregateID.String()),

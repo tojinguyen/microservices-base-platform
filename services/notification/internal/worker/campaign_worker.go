@@ -13,6 +13,8 @@ import (
 	"github.com/tojinguyen/notification/internal/domain"
 	"github.com/tojinguyen/notification/internal/dto"
 	"github.com/tojinguyen/notification/internal/repository"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"go.uber.org/zap"
 )
 
@@ -81,6 +83,14 @@ func (w *CampaignWorker) dispatchPendingCampaigns(ctx context.Context) {
 }
 
 func (w *CampaignWorker) dispatchCampaign(ctx context.Context, campaign *domain.Campaign) {
+	tracer := otel.Tracer("notification-service")
+	ctx, span := tracer.Start(ctx, "campaign.dispatch")
+	defer span.End()
+	span.SetAttributes(
+		attribute.String("campaign.id", campaign.Id.String()),
+		attribute.Int("campaign.total_recipients", campaign.TotalRecipients),
+	)
+
 	log := logger.L()
 	batchSize := w.cfg.Worker.CampaignBatchSize
 	if batchSize <= 0 {

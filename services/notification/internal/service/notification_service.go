@@ -13,12 +13,14 @@ import (
 
 	"backend/pkg/broker"
 	"backend/pkg/logger"
+	"backend/pkg/trace"
 
 	"github.com/google/uuid"
 	"github.com/tojinguyen/notification/internal/config"
 	"github.com/tojinguyen/notification/internal/domain"
 	"github.com/tojinguyen/notification/internal/dto"
 	"github.com/tojinguyen/notification/internal/repository"
+	"go.opentelemetry.io/otel"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -78,6 +80,10 @@ func (s *notificationService) CreateNotificationWithTemplate(ctx context.Context
 }
 
 func (s *notificationService) createFromTemplate(ctx context.Context, event dto.SendNotificationRequest, tmpl *domain.NotificationTemplate) (dto.SendNotificationResponse, error) {
+	tracer := otel.Tracer("notification-service")
+	ctx, span := tracer.Start(ctx, "service.create_notification")
+	defer span.End()
+
 	if s.prefSvc != nil {
 		enabled, err := s.prefSvc.IsNotificationEnabled(ctx, event.UserID, tmpl.EventType, tmpl.Channel)
 		if err != nil {
@@ -151,6 +157,10 @@ func (s *notificationService) createFromTemplate(ctx context.Context, event dto.
 // The outbox worker polls outbox_events and publishes to RabbitMQ, guaranteeing delivery
 // even if the service crashes after the DB commit.
 func (s *notificationService) createWithOutbox(ctx context.Context, notification *domain.Notification) (*domain.Notification, error) {
+	tracer := otel.Tracer("notification-service")
+	ctx, span := tracer.Start(ctx, "service.create_with_outbox")
+	defer span.End()
+
 	var created *domain.Notification
 
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -159,6 +169,9 @@ func (s *notificationService) createWithOutbox(ctx context.Context, notification
 		if txErr != nil {
 			return txErr
 		}
+
+		// Inject trace context vào payload để Outbox Worker có thể khôi phục và tiếp tục chuỗi trace
+		traceCtx := trace.InjectMap(ctx)
 
 		payload, txErr := json.Marshal(map[string]any{
 			"notification_id": created.Id,
@@ -171,6 +184,8 @@ func (s *notificationService) createWithOutbox(ctx context.Context, notification
 			"retry_count":     created.RetryCount,
 			// event_id is the notification ID — used by consumers for deduplication
 			"event_id": created.Id,
+			// trace_context carries the W3C traceparent for distributed tracing across async boundaries
+			"trace_context": traceCtx,
 		})
 		if txErr != nil {
 			return txErr

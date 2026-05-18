@@ -10,6 +10,8 @@ import (
 	"github.com/tojinguyen/notification/internal/config"
 	"github.com/tojinguyen/notification/internal/dto"
 	"github.com/tojinguyen/notification/internal/service"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"go.uber.org/zap"
 )
 
@@ -50,6 +52,11 @@ func (w *WebhookWorker) Start(ctx context.Context) {
 }
 
 func (w *WebhookWorker) HandleMessage(ctx context.Context, body []byte) error {
+	// Context đã chứa trace từ RabbitMQ (broker tự động extract khi consume message)
+	tracer := otel.Tracer("notification-service")
+	ctx, span := tracer.Start(ctx, "worker.webhook.process")
+	defer span.End()
+
 	log := logger.L()
 	var webhook dto.MailpitWebhook
 	if err := json.Unmarshal(body, &webhook); err != nil {
@@ -57,6 +64,7 @@ func (w *WebhookWorker) HandleMessage(ctx context.Context, body []byte) error {
 		return broker.ErrRejectToDLQ // Reject to DLQ immediately on malformed JSON
 	}
 
+	span.SetAttributes(attribute.String("webhook.mailpit_id", webhook.ID))
 	log.Info("Processing Mailpit webhook", zap.String("mailpit_id", webhook.ID))
 
 	if err := w.service.HandleMailpitWebhook(ctx, webhook); err != nil {
@@ -66,3 +74,4 @@ func (w *WebhookWorker) HandleMessage(ctx context.Context, body []byte) error {
 
 	return nil
 }
+
