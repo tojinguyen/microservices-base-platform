@@ -5,6 +5,7 @@
 #   http://redisinsight.localhost → RedisInsight (Redis GUI)
 #   http://jaeger.localhost       → Jaeger Tracing UI (Distributed Tracing)
 #   http://rabbitmq.localhost     → RabbitMQ Management UI
+#   http://mailpit.localhost      → Mailpit (Mail Server GUI)
 #
 # Yêu cầu: thêm vào hosts file (một lần duy nhất):
 #   Windows: C:\Windows\System32\drivers\etc\hosts
@@ -13,6 +14,7 @@
 #     127.0.0.1 redisinsight.localhost
 #     127.0.0.1 jaeger.localhost
 #     127.0.0.1 rabbitmq.localhost
+#     127.0.0.1 mailpit.localhost
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -68,3 +70,14 @@ spec:
                 name: rabbitmq-service
                 port:
                   number: 15672
+
+    - host: mailpit.localhost
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: mailpit-service
+                port:
+                  number: 8025

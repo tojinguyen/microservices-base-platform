@@ -217,3 +217,114 @@ spec:
           env:
             - name: APP_MODE
               value: "worker-outbox"
+
+---
+# 8. Deployment E: Worker xử lý Dead Letter Queue (DLQ)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notification-worker-dlq
+  namespace: microservices-platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: notification-worker-dlq
+  template:
+    metadata:
+      labels:
+        app: notification-worker-dlq
+    spec:
+      containers:
+        - name: notification-worker-dlq
+          image: notification-service:latest
+          imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "128Mi"
+              cpu: "200m"
+          envFrom:
+            - configMapRef:
+                name: notification-config
+            - secretRef:
+                name: notification-secret
+          env:
+            - name: APP_MODE
+              value: "worker-dlq"
+
+---
+# 9. Deployment F: Worker lên lịch thông báo (Scheduler)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notification-worker-scheduler
+  namespace: microservices-platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: notification-worker-scheduler
+  template:
+    metadata:
+      labels:
+        app: notification-worker-scheduler
+    spec:
+      containers:
+        - name: notification-worker-scheduler
+          image: notification-service:latest
+          imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "128Mi"
+              cpu: "100m"
+          envFrom:
+            - configMapRef:
+                name: notification-config
+            - secretRef:
+                name: notification-secret
+          env:
+            - name: APP_MODE
+              value: "worker-scheduler"
+
+---
+# 10. Deployment G: Worker xử lý chiến dịch (Campaign)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notification-worker-campaign
+  namespace: microservices-platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: notification-worker-campaign
+  template:
+    metadata:
+      labels:
+        app: notification-worker-campaign
+    spec:
+      containers:
+        - name: notification-worker-campaign
+          image: notification-service:latest
+          imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "128Mi"
+              cpu: "200m"
+          envFrom:
+            - configMapRef:
+                name: notification-config
+            - secretRef:
+                name: notification-secret
+          env:
+            - name: APP_MODE
+              value: "worker-campaign"

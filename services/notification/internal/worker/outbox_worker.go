@@ -75,24 +75,22 @@ func (w *outboxWorker) processBatch(ctx context.Context) {
 func (w *outboxWorker) publishEvent(ctx context.Context, event *domain.OutboxEvent) {
 	log := logger.L()
 
-	// Giải mã payload để lấy trace_context và khôi phục chuỗi trace từ HTTP request gốc
-	var payloadMap map[string]json.RawMessage
+	// Khôi phục chuỗi trace từ column trace_context riêng biệt.
+	// trace_context được lưu lúc tạo outbox event, giúp tiếp nối distributed trace
+	// qua async boundary (DB Outbox → RabbitMQ) kể cả khi service đã restart.
 	traceCtx := ctx
-	if err := json.Unmarshal(event.Payload, &payloadMap); err == nil {
-		if rawTraceCtx, ok := payloadMap["trace_context"]; ok {
-			var traceMap map[string]string
-			if err := json.Unmarshal(rawTraceCtx, &traceMap); err == nil && len(traceMap) > 0 {
-				traceCtx = trace.ExtractMap(ctx, traceMap)
-			}
-		}
+	if len(event.TraceContext) > 0 {
+		traceCtx = trace.ExtractMap(ctx, event.TraceContext)
 	}
 
-	// Tạo child span cho bước publish - trace sẽ tiếp tục từ context đã khôi phục phía trên
+	// Tạo child span — trace sẽ tiếp tục từ context đã khôi phục phía trên
 	tracer := otel.Tracer("notification-service")
 	traceCtx, span := tracer.Start(traceCtx, "outbox.publish")
 	defer span.End()
 
-	if err := w.broker.Publish(traceCtx, w.cfg.Queue.Exchange, event.RoutingKey, event.Payload); err != nil {
+	// Publish payload thuần (NotificationTask) — broker sẽ tự inject trace vào AMQP headers.
+	// Dùng json.RawMessage để tránh broker.Publish marshal lại []byte thành base64 string.
+	if err := w.broker.Publish(traceCtx, w.cfg.Queue.Exchange, event.RoutingKey, json.RawMessage(event.Payload)); err != nil {
 		log.Error("outbox: failed to publish event",
 			zap.String("event_id", event.ID.String()),
 			zap.String("aggregate_id", event.AggregateID.String()),
@@ -139,3 +137,4 @@ func (w *outboxWorker) publishEvent(ctx context.Context, event *domain.OutboxEve
 		zap.String("routing_key", event.RoutingKey),
 	)
 }
+

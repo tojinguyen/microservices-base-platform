@@ -32,21 +32,18 @@ type Config struct {
 	Otel       OtelConfig      `mapstructure:"otel"`
 }
 
-// OtelConfig chứa cấu hình OpenTelemetry Distributed Tracing.
 type OtelConfig struct {
-	// Enabled bật/tắt tính năng tracing. Mặc định: true.
-	Enabled bool `mapstructure:"enabled"`
-	// ExporterEndpoint là địa chỉ của OTLP collector (Jaeger).
-	// Ví dụ: "http://jaeger:4318" (docker) hoặc "http://jaeger-service:4318" (k8s).
-	ExporterEndpoint string `mapstructure:"exporter_endpoint"`
+	Enabled          bool   `mapstructure:"enabled"`
+	ExporterEndpoint string `mapstructure:"exporter_otlp_endpoint"`
 }
 
 type SMTPConfig struct {
-	Host     string `mapstructure:"host"`
-	Port     int    `mapstructure:"port"`
-	Username string `mapstructure:"username"`
-	Password string `mapstructure:"password"`
-	From     string `mapstructure:"from"`
+	Host          string `mapstructure:"host"`
+	Port          int    `mapstructure:"port"`
+	Username      string `mapstructure:"username"`
+	Password      string `mapstructure:"password"`
+	From          string `mapstructure:"from"`
+	MailpitAPIURL string `mapstructure:"mailpit_api_url"` // URL nội bộ để gọi Mailpit REST API, e.g. http://mailpit-service:8025
 }
 
 type QueueConfig struct {
@@ -60,18 +57,11 @@ type WorkerConfig struct {
 	MaxRetries                 int           `mapstructure:"max_retries"`
 	CircuitBreakerMaxFailures  int           `mapstructure:"circuit_breaker_max_failures"`
 	CircuitBreakerOpenDuration time.Duration `mapstructure:"circuit_breaker_open_duration"`
-	// Campaign dispatcher reads up to CampaignBatchSize recipients per DB round-trip.
-	// Defaults to 1000 if unset.
-	CampaignBatchSize int `mapstructure:"campaign_batch_size"`
-	// CampaignPrefetch is the RabbitMQ consumer prefetch for the campaign.email queue
-	// (back-pressure layer 1). Defaults to 20 if unset.
-	CampaignPrefetch int `mapstructure:"campaign_prefetch"`
+	CampaignBatchSize          int           `mapstructure:"campaign_batch_size"`
+	CampaignPrefetch           int           `mapstructure:"campaign_prefetch"`
 
-	// OutboxInterval is the poll interval in seconds for the outbox worker. Defaults to 2.
-	OutboxInterval int `mapstructure:"outbox_interval"`
-	// OutboxBatchSize is the number of outbox events processed per tick. Defaults to 100.
-	OutboxBatchSize int `mapstructure:"outbox_batch_size"`
-	// OutboxMaxRetries is the maximum publish attempts before an event is marked failed. Defaults to 5.
+	OutboxInterval   int `mapstructure:"outbox_interval"`
+	OutboxBatchSize  int `mapstructure:"outbox_batch_size"`
 	OutboxMaxRetries int `mapstructure:"outbox_max_retries"`
 }
 

@@ -170,26 +170,27 @@ func (s *notificationService) createWithOutbox(ctx context.Context, notification
 			return txErr
 		}
 
-		// Inject trace context vào payload để Outbox Worker có thể khôi phục và tiếp tục chuỗi trace
-		traceCtx := trace.InjectMap(ctx)
-
+		// Payload chỉ chứa NotificationTask thuần — không có trace_context hay event_id thừa.
+		// Email worker sẽ unmarshal trực tiếp body này thành dto.NotificationTask.
 		payload, txErr := json.Marshal(map[string]any{
 			"notification_id": created.Id,
 			"user_id":         created.UserID,
 			"event_type":      created.EventType,
 			"channel":         created.Channel,
 			"recipient":       created.Recipient,
-			"subject":         created.Subject,
-			"content":         created.Content,
-			"retry_count":     created.RetryCount,
-			// event_id is the notification ID — used by consumers for deduplication
-			"event_id": created.Id,
-			// trace_context carries the W3C traceparent for distributed tracing across async boundaries
-			"trace_context": traceCtx,
+			"data": map[string]string{
+				"subject": created.Subject,
+				"content": created.Content,
+			},
+			"retry_count": created.RetryCount,
 		})
 		if txErr != nil {
 			return txErr
 		}
+
+		// trace_context được lưu vào column riêng để Outbox Worker có thể
+		// khôi phục chuỗi trace phân tán mà không ảnh hưởng đến payload business.
+		traceCtx := trace.InjectMap(ctx)
 
 		outboxEvent := &domain.OutboxEvent{
 			AggregateID:   created.Id,
@@ -198,6 +199,7 @@ func (s *notificationService) createWithOutbox(ctx context.Context, notification
 			Payload:       payload,
 			RoutingKey:    string(created.Channel),
 			Status:        domain.OutboxStatusPending,
+			TraceContext:  traceCtx,
 		}
 		return s.outboxRepo.CreateWithTx(tx, outboxEvent)
 	})
@@ -300,34 +302,31 @@ func (s *notificationService) UpdateStatus(ctx context.Context, notificationID s
 }
 
 func (s *notificationService) HandleMailpitWebhook(ctx context.Context, webhook dto.MailpitWebhook) error {
-	url := fmt.Sprintf("http://mailpit:8025/api/v1/message/%s", webhook.ID)
+	mailpitBase := s.cfg.SMTP.MailpitAPIURL
+
+	url := fmt.Sprintf("%s/api/v1/message/%s/headers", mailpitBase, webhook.ID)
 
 	resp, err := http.Get(url)
 	if err != nil {
-		return fmt.Errorf("failed to fetch message from mailpit: %w", err)
+		return fmt.Errorf("failed to fetch message headers from mailpit: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("mailpit returned status %d", resp.StatusCode)
+		return fmt.Errorf("mailpit returned status %d for message headers", resp.StatusCode)
 	}
 
-	var msgDetail struct {
-		ID      string
-		Headers map[string][]string
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&msgDetail); err != nil {
-		return fmt.Errorf("failed to decode mailpit response: %w", err)
+	var headers map[string][]string
+	if err := json.NewDecoder(resp.Body).Decode(&headers); err != nil {
+		return fmt.Errorf("failed to decode mailpit headers response: %w", err)
 	}
 
-	// 2. Extract X-Notification-ID
-	notificationIDs := msgDetail.Headers["X-Notification-ID"]
+	notificationIDs := headers["X-Notification-Id"]
 	if len(notificationIDs) == 0 {
-		return fmt.Errorf("X-Notification-ID header not found in mailpit message %s", webhook.ID)
+		return fmt.Errorf("X-Notification-Id header not found in mailpit message %s", webhook.ID)
 	}
 	notificationID := notificationIDs[0]
 
-	// 3. Update status to Sent
 	now := time.Now().UTC()
 	return s.UpdateStatus(ctx, notificationID, domain.NotificationStatusSent, "", &now)
 }
