@@ -66,13 +66,16 @@ func main() {
 	authService := service.NewAuthService(userRepo, authenticator, cache, cfg.GoogleOAuth.ClientID, cfg.GoogleOAuth.ClientSecret, cfg.GoogleOAuth.RedirectURL)
 	authHandler := handler.NewAuthHandler(authService)
 
+	seedService := service.NewSeedService(userRepo)
+	seedHandler := handler.NewSeedHandler(seedService)
+
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
 
 	r.Use(gin.Recovery())
 	r.Use(logger.GinMiddleware())
 
-	route.RegisterRoutes(r, authHandler, authenticator)
+	route.RegisterRoutes(r, authHandler, seedHandler, authenticator)
 
 	srv := &http.Server{
 		Addr:    fmt.Sprintf(":%d", cfg.ServerPort),

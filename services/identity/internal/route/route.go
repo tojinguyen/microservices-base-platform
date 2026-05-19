@@ -13,7 +13,7 @@ import (
 	_ "github.com/tojinguyen/identity/docs"
 )
 
-func RegisterRoutes(r *gin.Engine, authHandler *handler.AuthHandler, authenticator *auth.Authenticator) {
+func RegisterRoutes(r *gin.Engine, authHandler *handler.AuthHandler, seedHandler *handler.SeedHandler, authenticator *auth.Authenticator) {
 	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	r.Use(middleware.PrometheusMiddleware())
@@ -28,6 +28,11 @@ func RegisterRoutes(r *gin.Engine, authHandler *handler.AuthHandler, authenticat
 
 		v1.GET("/google/login", authHandler.GoogleLogin)
 		v1.GET("/google/callback", authHandler.GoogleCallback)
+	}
+
+	admin := r.Group("/api/v1/admin")
+	{
+		admin.POST("/seed/users", seedHandler.SeedUsers)
 	}
 
 	profile := r.Group("/api/v1/profile")

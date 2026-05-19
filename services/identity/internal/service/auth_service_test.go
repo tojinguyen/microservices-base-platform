@@ -1,8 +1,10 @@
 package service
 
 import (
+	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"backend/pkg/auth"
 
@@ -10,9 +12,17 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/tojinguyen/identity/internal/domain"
 	"github.com/tojinguyen/identity/internal/repository/mocks"
+	"backend/pkg/logger"
 )
 
+type dummyCache struct{}
+
+func (c *dummyCache) Set(ctx context.Context, key string, value interface{}, expiration time.Duration) error { return nil }
+func (c *dummyCache) Get(ctx context.Context, key string, dest interface{}) error { return nil }
+func (c *dummyCache) Delete(ctx context.Context, keys ...string) error { return nil }
+
 func setupAuthServiceTest(t *testing.T) (*authService, *mocks.UserRepository, *auth.Authenticator) {
+	_ = logger.Init("test-identity", "test")
 	mockRepo := mocks.NewUserRepository(t)
 
 	authCfg := auth.Config{
@@ -26,6 +36,7 @@ func setupAuthServiceTest(t *testing.T) (*authService, *mocks.UserRepository, *a
 	svc := &authService{
 		userRepo:      mockRepo,
 		authenticator: authenticator,
+		cache:         &dummyCache{},
 	}
 
 	return svc, mockRepo, authenticator
@@ -74,7 +85,7 @@ func TestAuthService_Login(t *testing.T) {
 
 		assert.Error(t, err)
 		assert.Nil(t, resp)
-		assert.Equal(t, "invalid credentials", err.Error())
+		assert.Equal(t, "[401] invalid credentials", err.Error())
 	})
 
 	t.Run("Login_UserNotFound", func(t *testing.T) {

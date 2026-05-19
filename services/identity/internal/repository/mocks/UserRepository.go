@@ -14,6 +14,24 @@ type UserRepository struct {
 	mock.Mock
 }
 
+// BulkCreate provides a mock function with given fields: ctx, users, batchSize
+func (_m *UserRepository) BulkCreate(ctx context.Context, users []*domain.User, batchSize int) error {
+	ret := _m.Called(ctx, users, batchSize)
+
+	if len(ret) == 0 {
+		panic("no return value specified for BulkCreate")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, []*domain.User, int) error); ok {
+		r0 = rf(ctx, users, batchSize)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // Create provides a mock function with given fields: ctx, user
 func (_m *UserRepository) Create(ctx context.Context, user *domain.User) error {
 	ret := _m.Called(ctx, user)

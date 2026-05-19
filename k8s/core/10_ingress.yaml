@@ -41,6 +41,14 @@ spec:
                 name: identity-service
                 port:
                   number: 8081
+          # Admin API (Seed Users, etc) -> identity:8081/api/v1/admin/*
+          - path: /(api/v1/admin/.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: identity-service
+                port:
+                  number: 8081
           # Swagger: /identity/swagger/* -> identity:8081/swagger/*
           - path: /identity/(swagger/.*)
             pathType: ImplementationSpecific

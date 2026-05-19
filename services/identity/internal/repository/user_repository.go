@@ -11,6 +11,7 @@ import (
 
 type UserRepository interface {
 	Create(ctx context.Context, user *domain.User) error
+	BulkCreate(ctx context.Context, users []*domain.User, batchSize int) error
 	GetByEmail(ctx context.Context, email string) (*domain.User, error)
 	GetByID(ctx context.Context, id string) (*domain.User, error)
 	Update(ctx context.Context, user *domain.User) error
@@ -27,6 +28,10 @@ func NewUserRepository(db *gorm.DB) UserRepository {
 
 func (r *userRepository) Create(ctx context.Context, user *domain.User) error {
 	return r.db.WithContext(ctx).Create(user).Error
+}
+
+func (r *userRepository) BulkCreate(ctx context.Context, users []*domain.User, batchSize int) error {
+	return r.db.WithContext(ctx).CreateInBatches(users, batchSize).Error
 }
 
 func (r *userRepository) GetByEmail(ctx context.Context, email string) (*domain.User, error) {
