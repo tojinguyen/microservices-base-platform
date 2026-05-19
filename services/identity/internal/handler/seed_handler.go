@@ -49,6 +49,7 @@ func (h *SeedHandler) SeedUsers(c *gin.Context) {
 	c.Writer.Header().Set("Cache-Control", "no-cache")
 	c.Writer.Header().Set("Connection", "keep-alive")
 	c.Writer.Header().Set("Transfer-Encoding", "chunked")
+	c.Writer.Header().Set("X-Accel-Buffering", "no") // Quan trọng: Yêu cầu Nginx KHÔNG buffer stream này
 
 	// Create channel for progress events with buffer
 	progressChan := make(chan dto.SeedProgressEvent, 100)
