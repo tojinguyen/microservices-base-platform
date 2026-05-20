@@ -16,22 +16,6 @@ grafana:
       serve_from_sub_path: true
     date_formats:
       default_timezone: Asia/Ho_Chi_Minh
-  datasources:
-    datasources.yaml:
-      apiVersion: 1
-      datasources:
-        - name: Loki
-          type: loki
-          url: http://loki:3100
-          access: proxy
-          isDefault: true
-        - name: Prometheus
-          type: prometheus
-          url: http://prometheus-kube-prometheus-prometheus.monitoring.svc.cluster.local:9090
-          access: proxy
-          isDefault: false
-          jsonData:
-            timeInterval: "15s"
   # Grafana tự động load dashboard từ ConfigMap trong namespace monitoring
   dashboardProviders:
     dashboardproviders.yaml:
