@@ -36,7 +36,6 @@ func RegisterRoutes(
 			}, rlCfg.SendLimit, time.Duration(rlCfg.SendWindowSecs)*time.Second),
 			notificationHandler.SendNotification,
 		)
-		v1.POST("/schedule", notificationHandler.ScheduleNotification)
 		v1.POST("/webhooks/mailpit", notificationHandler.HandleMailpitWebhook)
 	}
 
@@ -52,7 +51,7 @@ func RegisterRoutes(
 	}
 
 	// Admin endpoints — in production, protect with API key or internal service token middleware.
-	admin := r.Group("/admin")
+	admin := r.Group("/api/v1/notifications/admin")
 	admin.Use(limiter.GinMiddleware(ratelimit.ByIP))
 	{
 		campaigns := admin.Group("/campaigns")

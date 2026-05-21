@@ -33,7 +33,7 @@ import (
 // @version 1.0
 // @description This is a notification service API
 // @host localhost
-// @BasePath /api/v1/notifications
+// @BasePath /api/v1
 
 func main() {
 	if err := logger.Init("notification-service", "dev"); err != nil {

@@ -1,12 +1,25 @@
-basePath: /api/v1/notifications
+basePath: /api/v1
 definitions:
-  domain.EventType:
+  github_com_tojinguyen_notification_internal_domain.CampaignStatus:
+    enum:
+    - pending
+    - dispatching
+    - completed
+    - failed
+    type: string
+    x-enum-varnames:
+    - CampaignStatusPending
+    - CampaignStatusDispatching
+    - CampaignStatusCompleted
+    - CampaignStatusFailed
+  github_com_tojinguyen_notification_internal_domain.EventType:
     enum:
     - auth_otp
     - auth_login_alert
     - order_created
     - payment_success
     - promotion_campaign
+    - daily_reminder
     type: string
     x-enum-varnames:
     - EventOTP
@@ -14,17 +27,221 @@ definitions:
     - EventOrderCreated
     - EventPaymentSuccess
     - EventPromotion
-  dto.HealthResponse:
+    - EventDailyReminder
+  github_com_tojinguyen_notification_internal_domain.NotificationChannel:
+    enum:
+    - email
+    - sms
+    - zalo
+    - push
+    type: string
+    x-enum-varnames:
+    - ChannelEmail
+    - ChannelSMS
+    - ChannelZalo
+    - ChannelPush
+  github_com_tojinguyen_notification_internal_domain.NotificationStatus:
+    enum:
+    - pending
+    - processing
+    - sent
+    - delivering
+    - failed
+    type: string
+    x-enum-varnames:
+    - NotificationStatusPending
+    - NotificationStatusProcessing
+    - NotificationStatusSent
+    - NotificationStatusDelivering
+    - NotificationStatusFailed
+  github_com_tojinguyen_notification_internal_dto.CampaignStatsResponse:
+    properties:
+      campaign_id:
+        type: string
+      dispatched_count:
+        type: integer
+      failed_count:
+        type: integer
+      last_dispatched_offset:
+        type: integer
+      pending_count:
+        type: integer
+      progress_pct:
+        type: number
+      sent_count:
+        type: integer
+      status:
+        $ref: '#/definitions/github_com_tojinguyen_notification_internal_domain.CampaignStatus'
+      total_recipients:
+        type: integer
+    type: object
+  github_com_tojinguyen_notification_internal_dto.CreateCampaignRequest:
+    properties:
+      channel:
+        $ref: '#/definitions/github_com_tojinguyen_notification_internal_domain.NotificationChannel'
+      content:
+        type: string
+      event_type:
+        $ref: '#/definitions/github_com_tojinguyen_notification_internal_domain.EventType'
+      recipients:
+        description: Optional, only used when TargetAudience == "specific"
+        items:
+          $ref: '#/definitions/github_com_tojinguyen_notification_internal_dto.RecipientInput'
+        type: array
+      scheduled_at:
+        type: string
+      subject:
+        type: string
+      target_audience:
+        description: e.g., "all_users", "specific"
+        type: string
+      title:
+        type: string
+    required:
+    - channel
+    - content
+    - event_type
+    - scheduled_at
+    - title
+    type: object
+  github_com_tojinguyen_notification_internal_dto.CreateCampaignResponse:
+    properties:
+      campaign_id:
+        type: string
+      message:
+        type: string
+      scheduled_at:
+        type: string
+      total_recipients:
+        type: integer
+    type: object
+  github_com_tojinguyen_notification_internal_dto.DLQMessageResponse:
+    properties:
+      created_at:
+        type: string
+      error_message:
+        type: string
+      id:
+        type: string
+      notification_id:
+        type: string
+      payload:
+        type: string
+      queue_name:
+        type: string
+      status:
+        type: string
+    type: object
+  github_com_tojinguyen_notification_internal_dto.DeleteScheduleRequest:
+    properties:
+      event_type:
+        $ref: '#/definitions/github_com_tojinguyen_notification_internal_domain.EventType'
+    required:
+    - event_type
+    type: object
+  github_com_tojinguyen_notification_internal_dto.GetPreferencesResponse:
+    properties:
+      preferences:
+        items:
+          $ref: '#/definitions/github_com_tojinguyen_notification_internal_dto.PreferenceItem'
+        type: array
+      user_id:
+        type: string
+    type: object
+  github_com_tojinguyen_notification_internal_dto.GetSchedulesResponse:
+    properties:
+      schedules:
+        items:
+          $ref: '#/definitions/github_com_tojinguyen_notification_internal_dto.ScheduleItem'
+        type: array
+      user_id:
+        type: string
+    type: object
+  github_com_tojinguyen_notification_internal_dto.HealthResponse:
     properties:
       service:
         type: string
       status:
         type: string
     type: object
-  dto.SendNotificationRequest:
+  github_com_tojinguyen_notification_internal_dto.ListNotificationsResponse:
+    properties:
+      has_more:
+        type: boolean
+      items:
+        items:
+          $ref: '#/definitions/github_com_tojinguyen_notification_internal_dto.NotificationItem'
+        type: array
+      next_cursor:
+        type: string
+    type: object
+  github_com_tojinguyen_notification_internal_dto.NotificationItem:
+    properties:
+      channel:
+        $ref: '#/definitions/github_com_tojinguyen_notification_internal_domain.NotificationChannel'
+      created_at:
+        type: string
+      error_message:
+        type: string
+      event_type:
+        $ref: '#/definitions/github_com_tojinguyen_notification_internal_domain.EventType'
+      id:
+        type: string
+      recipient:
+        type: string
+      retry_count:
+        type: integer
+      sent_at:
+        type: string
+      status:
+        $ref: '#/definitions/github_com_tojinguyen_notification_internal_domain.NotificationStatus'
+      subject:
+        type: string
+    type: object
+  github_com_tojinguyen_notification_internal_dto.PreferenceItem:
+    properties:
+      channel:
+        $ref: '#/definitions/github_com_tojinguyen_notification_internal_domain.NotificationChannel'
+      enabled:
+        type: boolean
+      event_type:
+        $ref: '#/definitions/github_com_tojinguyen_notification_internal_domain.EventType'
+      id:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  github_com_tojinguyen_notification_internal_dto.RecipientInput:
+    properties:
+      recipient:
+        type: string
+      user_id:
+        type: string
+    required:
+    - recipient
+    - user_id
+    type: object
+  github_com_tojinguyen_notification_internal_dto.ScheduleItem:
+    properties:
+      created_at:
+        type: string
+      enabled:
+        type: boolean
+      event_type:
+        $ref: '#/definitions/github_com_tojinguyen_notification_internal_domain.EventType'
+      id:
+        type: string
+      last_sent_at:
+        type: string
+      send_time:
+        type: string
+      timezone:
+        type: string
+    type: object
+  github_com_tojinguyen_notification_internal_dto.SendNotificationRequest:
     properties:
       event_type:
-        $ref: '#/definitions/domain.EventType'
+        $ref: '#/definitions/github_com_tojinguyen_notification_internal_domain.EventType'
       metadata:
         additionalProperties: true
         type: object
@@ -38,12 +255,68 @@ definitions:
     - payload
     - user_id
     type: object
-  dto.SendNotificationResponse:
+  github_com_tojinguyen_notification_internal_dto.SendNotificationResponse:
     properties:
       message:
         type: string
       notification_id:
         type: string
+    type: object
+  github_com_tojinguyen_notification_internal_dto.UpsertPreferenceItem:
+    properties:
+      channel:
+        $ref: '#/definitions/github_com_tojinguyen_notification_internal_domain.NotificationChannel'
+      enabled:
+        type: boolean
+      event_type:
+        $ref: '#/definitions/github_com_tojinguyen_notification_internal_domain.EventType'
+    required:
+    - channel
+    - event_type
+    type: object
+  github_com_tojinguyen_notification_internal_dto.UpsertPreferencesRequest:
+    properties:
+      preferences:
+        items:
+          $ref: '#/definitions/github_com_tojinguyen_notification_internal_dto.UpsertPreferenceItem'
+        minItems: 1
+        type: array
+    required:
+    - preferences
+    type: object
+  github_com_tojinguyen_notification_internal_dto.UpsertPreferencesResponse:
+    properties:
+      message:
+        type: string
+      preferences:
+        items:
+          $ref: '#/definitions/github_com_tojinguyen_notification_internal_dto.PreferenceItem'
+        type: array
+      user_id:
+        type: string
+    type: object
+  github_com_tojinguyen_notification_internal_dto.UpsertScheduleRequest:
+    properties:
+      enabled:
+        type: boolean
+      event_type:
+        $ref: '#/definitions/github_com_tojinguyen_notification_internal_domain.EventType'
+      payload:
+        additionalProperties: true
+        type: object
+      send_time:
+        description: '"HH:MM"'
+        type: string
+      timezone:
+        description: IANA tz, e.g. "Asia/Ho_Chi_Minh"
+        type: string
+      user_id:
+        type: string
+    required:
+    - event_type
+    - send_time
+    - timezone
+    - user_id
     type: object
   response.StandardResponse:
     properties:
@@ -60,7 +333,212 @@ info:
   title: Notification Service API
   version: "1.0"
 paths:
-  /health:
+  /notifications:
+    get:
+      description: Returns paginated notification history for a user using cursor-based
+        pagination
+      parameters:
+      - description: User ID (required)
+        in: query
+        name: user_id
+        type: string
+      - description: Filter by status (pending|processing|sent|delivering|failed)
+        in: query
+        name: status
+        type: string
+      - description: Filter by channel (email|sms|zalo|push)
+        in: query
+        name: channel
+        type: string
+      - description: Filter by event type
+        in: query
+        name: event_type
+        type: string
+      - description: Start time RFC3339 (e.g. 2026-01-01T00:00:00Z)
+        in: query
+        name: from
+        type: string
+      - description: End time RFC3339
+        in: query
+        name: to
+        type: string
+      - description: Opaque pagination cursor from previous response
+        in: query
+        name: cursor
+        type: string
+      - description: Page size (default 20, max 100)
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.StandardResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_tojinguyen_notification_internal_dto.ListNotificationsResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.StandardResponse'
+            - properties:
+                error:
+                  properties:
+                    code:
+                      type: integer
+                    message:
+                      type: string
+                  type: object
+              type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.StandardResponse'
+            - properties:
+                error:
+                  properties:
+                    code:
+                      type: integer
+                    message:
+                      type: string
+                  type: object
+              type: object
+      summary: List notification history
+      tags:
+      - notifications
+  /notifications/admin/campaigns:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Campaign request
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_tojinguyen_notification_internal_dto.CreateCampaignRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.StandardResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_tojinguyen_notification_internal_dto.CreateCampaignResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.StandardResponse'
+      summary: Create a mass notification campaign
+      tags:
+      - admin
+  /notifications/admin/campaigns/{id}/stats:
+    get:
+      parameters:
+      - description: Campaign ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.StandardResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_tojinguyen_notification_internal_dto.CampaignStatsResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.StandardResponse'
+      summary: Get campaign delivery stats
+      tags:
+      - admin
+  /notifications/admin/dlq/messages:
+    get:
+      parameters:
+      - description: Filter by status (pending|replayed|ignored)
+        in: query
+        name: status
+        type: string
+      - description: Page number
+        in: query
+        name: page
+        type: integer
+      - description: Page limit
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.StandardResponse'
+            - properties:
+                data:
+                  properties:
+                    messages:
+                      items:
+                        $ref: '#/definitions/github_com_tojinguyen_notification_internal_dto.DLQMessageResponse'
+                      type: array
+                    total:
+                      type: integer
+                  type: object
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.StandardResponse'
+      summary: List Dead Letter Queue messages
+      tags:
+      - admin
+  /notifications/admin/dlq/replay/{id}:
+    post:
+      parameters:
+      - description: Message ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.StandardResponse'
+            - properties:
+                data:
+                  type: string
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.StandardResponse'
+      summary: Replay a Dead Letter Queue message
+      tags:
+      - admin
+  /notifications/health:
     get:
       description: check service health
       produces:
@@ -73,12 +551,12 @@ paths:
             - $ref: '#/definitions/response.StandardResponse'
             - properties:
                 data:
-                  $ref: '#/definitions/dto.HealthResponse'
+                  $ref: '#/definitions/github_com_tojinguyen_notification_internal_dto.HealthResponse'
               type: object
       summary: Health check
       tags:
       - health
-  /send:
+  /notifications/send:
     post:
       consumes:
       - application/json
@@ -90,7 +568,7 @@ paths:
         name: event
         required: true
         schema:
-          $ref: '#/definitions/dto.SendNotificationRequest'
+          $ref: '#/definitions/github_com_tojinguyen_notification_internal_dto.SendNotificationRequest'
       produces:
       - application/json
       responses:
@@ -101,7 +579,7 @@ paths:
             - $ref: '#/definitions/response.StandardResponse'
             - properties:
                 data:
-                  $ref: '#/definitions/dto.SendNotificationResponse'
+                  $ref: '#/definitions/github_com_tojinguyen_notification_internal_dto.SendNotificationResponse'
               type: object
         "400":
           description: Bad Request
@@ -134,7 +612,7 @@ paths:
       summary: Send notification
       tags:
       - notifications
-  /webhooks/mailpit:
+  /notifications/webhooks/mailpit:
     post:
       consumes:
       - application/json
@@ -154,4 +632,285 @@ paths:
       summary: Handle Mailpit webhook
       tags:
       - webhooks
+  /users/{id}/notification-preferences:
+    get:
+      description: Returns toggleable notification preferences for a specific user
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.StandardResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_tojinguyen_notification_internal_dto.GetPreferencesResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.StandardResponse'
+            - properties:
+                error:
+                  properties:
+                    code:
+                      type: integer
+                    message:
+                      type: string
+                  type: object
+              type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.StandardResponse'
+            - properties:
+                error:
+                  properties:
+                    code:
+                      type: integer
+                    message:
+                      type: string
+                  type: object
+              type: object
+      summary: Get user notification preferences
+      tags:
+      - preferences
+    put:
+      consumes:
+      - application/json
+      description: Upserts notification preferences for a user. Only promotion_campaign
+        event is configurable.
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Preferences payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_tojinguyen_notification_internal_dto.UpsertPreferencesRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.StandardResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_tojinguyen_notification_internal_dto.UpsertPreferencesResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.StandardResponse'
+            - properties:
+                error:
+                  properties:
+                    code:
+                      type: integer
+                    message:
+                      type: string
+                  type: object
+              type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.StandardResponse'
+            - properties:
+                error:
+                  properties:
+                    code:
+                      type: integer
+                    message:
+                      type: string
+                  type: object
+              type: object
+      summary: Update user notification preferences
+      tags:
+      - preferences
+  /users/{id}/notification-schedules:
+    delete:
+      consumes:
+      - application/json
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Event type to delete
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_tojinguyen_notification_internal_dto.DeleteScheduleRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.StandardResponse'
+            - properties:
+                data:
+                  type: string
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.StandardResponse'
+            - properties:
+                error:
+                  properties:
+                    code:
+                      type: integer
+                    message:
+                      type: string
+                  type: object
+              type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.StandardResponse'
+            - properties:
+                error:
+                  properties:
+                    code:
+                      type: integer
+                    message:
+                      type: string
+                  type: object
+              type: object
+      summary: Delete a notification schedule
+      tags:
+      - schedules
+    get:
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.StandardResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_tojinguyen_notification_internal_dto.GetSchedulesResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.StandardResponse'
+            - properties:
+                error:
+                  properties:
+                    code:
+                      type: integer
+                    message:
+                      type: string
+                  type: object
+              type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.StandardResponse'
+            - properties:
+                error:
+                  properties:
+                    code:
+                      type: integer
+                    message:
+                      type: string
+                  type: object
+              type: object
+      summary: Get all notification schedules for a user
+      tags:
+      - schedules
+    put:
+      consumes:
+      - application/json
+      description: Creates or updates a daily notification schedule for a user (identified
+        by path :id).
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Schedule config
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_tojinguyen_notification_internal_dto.UpsertScheduleRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.StandardResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_tojinguyen_notification_internal_dto.ScheduleItem'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.StandardResponse'
+            - properties:
+                error:
+                  properties:
+                    code:
+                      type: integer
+                    message:
+                      type: string
+                  type: object
+              type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.StandardResponse'
+            - properties:
+                error:
+                  properties:
+                    code:
+                      type: integer
+                    message:
+                      type: string
+                  type: object
+              type: object
+      summary: Set a recurring daily notification schedule
+      tags:
+      - schedules
 swagger: "2.0"

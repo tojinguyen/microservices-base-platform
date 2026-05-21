@@ -20,7 +20,13 @@
       "Bash(go get *)",
       "PowerShell(Get-ChildItem -Path \"d:\\\\BACKEND\\\\PROJECTS\\\\microservices-base-platform\\\\services\\\\notification\" -Recurse -Force | Select-Object FullName | ForEach-Object { $_.FullName } | Sort-Object)",
       "PowerShell(Get-ChildItem -Path \"d:\\\\BACKEND\\\\PROJECTS\\\\microservices-base-platform\\\\pkg\" -Recurse -Force | Select-Object FullName | ForEach-Object { $_.FullName } | Sort-Object)",
-      "Bash(grep -E \"\\\\.sql$\")"
+      "Bash(grep -E \"\\\\.sql$\")",
+      "Bash(docker info *)",
+      "Bash(Select-String -Pattern \"GET|POST|PUT|DELETE|schedule\")",
+      "Bash(Select-Object -First 40)",
+      "Bash(swag init *)",
+      "Bash(go vet *)",
+      "Bash(go test *)"
     ]
   }
 }

@@ -30,7 +30,7 @@ func NewCampaignHandler(svc service.CampaignService) *CampaignHandler {
 // @Param        body body dto.CreateCampaignRequest true "Campaign request"
 // @Success      201 {object} response.StandardResponse{data=dto.CreateCampaignResponse}
 // @Failure      400 {object} response.StandardResponse
-// @Router       /admin/campaigns [post]
+// @Router       /notifications/admin/campaigns [post]
 func (h *CampaignHandler) CreateCampaign(c *gin.Context) {
 	var req dto.CreateCampaignRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -54,7 +54,7 @@ func (h *CampaignHandler) CreateCampaign(c *gin.Context) {
 // @Param        id path string true "Campaign ID"
 // @Success      200 {object} response.StandardResponse{data=dto.CampaignStatsResponse}
 // @Failure      400 {object} response.StandardResponse
-// @Router       /admin/campaigns/{id}/stats [get]
+// @Router       /notifications/admin/campaigns/{id}/stats [get]
 func (h *CampaignHandler) GetCampaignStats(c *gin.Context) {
 	campaignID := c.Param("id")
 	if campaignID == "" {
@@ -87,7 +87,7 @@ func NewNotificationHandler(svc service.NotificationService) *NotificationHandle
 // @Tags health
 // @Produce json
 // @Success 200 {object} response.StandardResponse{data=dto.HealthResponse}
-// @Router /health [get]
+// @Router /notifications/health [get]
 func (h *NotificationHandler) Health(c *gin.Context) {
 	response.OK(c.Writer, dto.HealthResponse{
 		Service: "notification-service",
@@ -105,7 +105,7 @@ func (h *NotificationHandler) Health(c *gin.Context) {
 // @Success 200 {object} response.StandardResponse{data=dto.SendNotificationResponse}
 // @Failure 400 {object} response.StandardResponse{error=object{code=int,message=string}}
 // @Failure 500 {object} response.StandardResponse{error=object{code=int,message=string}}
-// @Router /send [post]
+// @Router /notifications/send [post]
 func (h *NotificationHandler) SendNotification(c *gin.Context) {
 	var req dto.SendNotificationRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -114,33 +114,6 @@ func (h *NotificationHandler) SendNotification(c *gin.Context) {
 	}
 
 	resp, err := h.service.CreateNotification(c.Request.Context(), req)
-	if err != nil {
-		response.Error(c.Writer, c.Request, err)
-		return
-	}
-
-	response.OK(c.Writer, resp)
-}
-
-// ScheduleNotification godoc
-// @Summary Schedule a notification for future delivery
-// @Description Inserts a notification that will be delivered at the specified scheduled_at time
-// @Tags notifications
-// @Accept json
-// @Produce json
-// @Param body body dto.ScheduleNotificationRequest true "Schedule request"
-// @Success 202 {object} response.StandardResponse{data=dto.ScheduleNotificationResponse}
-// @Failure 400 {object} response.StandardResponse{error=object{code=int,message=string}}
-// @Failure 500 {object} response.StandardResponse{error=object{code=int,message=string}}
-// @Router /schedule [post]
-func (h *NotificationHandler) ScheduleNotification(c *gin.Context) {
-	var req dto.ScheduleNotificationRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Error(c.Writer, c.Request, err)
-		return
-	}
-
-	resp, err := h.service.ScheduleNotification(c.Request.Context(), req)
 	if err != nil {
 		response.Error(c.Writer, c.Request, err)
 		return
@@ -165,7 +138,7 @@ func (h *NotificationHandler) ScheduleNotification(c *gin.Context) {
 // @Success 200 {object} response.StandardResponse{data=dto.ListNotificationsResponse}
 // @Failure 400 {object} response.StandardResponse{error=object{code=int,message=string}}
 // @Failure 500 {object} response.StandardResponse{error=object{code=int,message=string}}
-// @Router / [get]
+// @Router /notifications [get]
 func (h *NotificationHandler) ListNotifications(c *gin.Context) {
 	var req dto.ListNotificationsRequest
 	if err := c.ShouldBindQuery(&req); err != nil {
@@ -193,7 +166,7 @@ func (h *NotificationHandler) ListNotifications(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Success 200 {object} response.StandardResponse{data=string}
-// @Router /webhooks/mailpit [post]
+// @Router /notifications/webhooks/mailpit [post]
 func (h *NotificationHandler) HandleMailpitWebhook(c *gin.Context) {
 	var webhook dto.MailpitWebhook
 	if err := c.ShouldBindJSON(&webhook); err != nil {
@@ -226,7 +199,7 @@ func NewPreferenceHandler(prefSvc service.PreferenceService) *PreferenceHandler 
 // @Success 200 {object} response.StandardResponse{data=dto.GetPreferencesResponse}
 // @Failure 400 {object} response.StandardResponse{error=object{code=int,message=string}}
 // @Failure 500 {object} response.StandardResponse{error=object{code=int,message=string}}
-// @Router /api/v1/users/{id}/notification-preferences [get]
+// @Router /users/{id}/notification-preferences [get]
 func (h *PreferenceHandler) GetPreferences(c *gin.Context) {
 	userID := c.Param("id")
 	if userID == "" {
@@ -254,7 +227,7 @@ func (h *PreferenceHandler) GetPreferences(c *gin.Context) {
 // @Success 200 {object} response.StandardResponse{data=dto.UpsertPreferencesResponse}
 // @Failure 400 {object} response.StandardResponse{error=object{code=int,message=string}}
 // @Failure 500 {object} response.StandardResponse{error=object{code=int,message=string}}
-// @Router /api/v1/users/{id}/notification-preferences [put]
+// @Router /users/{id}/notification-preferences [put]
 func (h *PreferenceHandler) UpsertPreferences(c *gin.Context) {
 	userID := c.Param("id")
 	if userID == "" {
@@ -298,7 +271,7 @@ func NewScheduleHandler(svc service.SchedulerService) *ScheduleHandler {
 // @Success 200 {object} response.StandardResponse{data=dto.ScheduleItem}
 // @Failure 400 {object} response.StandardResponse{error=object{code=int,message=string}}
 // @Failure 500 {object} response.StandardResponse{error=object{code=int,message=string}}
-// @Router /api/v1/users/{id}/notification-schedules [put]
+// @Router /users/{id}/notification-schedules [put]
 func (h *ScheduleHandler) UpsertSchedule(c *gin.Context) {
 	userID := c.Param("id")
 	if userID == "" {
@@ -330,7 +303,7 @@ func (h *ScheduleHandler) UpsertSchedule(c *gin.Context) {
 // @Success 200 {object} response.StandardResponse{data=dto.GetSchedulesResponse}
 // @Failure 400 {object} response.StandardResponse{error=object{code=int,message=string}}
 // @Failure 500 {object} response.StandardResponse{error=object{code=int,message=string}}
-// @Router /api/v1/users/{id}/notification-schedules [get]
+// @Router /users/{id}/notification-schedules [get]
 func (h *ScheduleHandler) GetSchedules(c *gin.Context) {
 	userID := c.Param("id")
 	if userID == "" {
@@ -357,7 +330,7 @@ func (h *ScheduleHandler) GetSchedules(c *gin.Context) {
 // @Success 200 {object} response.StandardResponse{data=string}
 // @Failure 400 {object} response.StandardResponse{error=object{code=int,message=string}}
 // @Failure 500 {object} response.StandardResponse{error=object{code=int,message=string}}
-// @Router /api/v1/users/{id}/notification-schedules [delete]
+// @Router /users/{id}/notification-schedules [delete]
 func (h *ScheduleHandler) DeleteSchedule(c *gin.Context) {
 	userID := c.Param("id")
 	if userID == "" {
@@ -398,7 +371,7 @@ func NewDLQHandler(svc service.DLQService) *DLQHandler {
 // @Param        limit  query int    false "Page limit"
 // @Success      200 {object} response.StandardResponse{data=object{messages=[]dto.DLQMessageResponse,total=int}}
 // @Failure      400 {object} response.StandardResponse
-// @Router       /admin/dlq/messages [get]
+// @Router       /notifications/admin/dlq/messages [get]
 func (h *DLQHandler) ListMessages(c *gin.Context) {
 	status := c.Query("status")
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
@@ -425,7 +398,7 @@ func (h *DLQHandler) ListMessages(c *gin.Context) {
 // @Param        id path string true "Message ID"
 // @Success      200 {object} response.StandardResponse{data=string}
 // @Failure      400 {object} response.StandardResponse
-// @Router       /admin/dlq/replay/{id} [post]
+// @Router       /notifications/admin/dlq/replay/{id} [post]
 func (h *DLQHandler) ReplayMessage(c *gin.Context) {
 	id := c.Param("id")
 	if id == "" {

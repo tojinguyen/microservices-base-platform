@@ -13,20 +13,6 @@ type SendNotificationRequest struct {
 	Metadata  map[string]interface{} `json:"metadata,omitempty"`
 }
 
-type ScheduleNotificationRequest struct {
-	UserID      string                 `json:"user_id"      binding:"required"`
-	EventType   domain.EventType       `json:"event_type"   binding:"required"`
-	Payload     map[string]interface{} `json:"payload"      binding:"required"`
-	Metadata    map[string]interface{} `json:"metadata,omitempty"`
-	ScheduledAt time.Time              `json:"scheduled_at" binding:"required"`
-}
-
-type ScheduleNotificationResponse struct {
-	NotificationID string    `json:"notification_id"`
-	ScheduledAt    time.Time `json:"scheduled_at"`
-	Message        string    `json:"message"`
-}
-
 type HealthResponse struct {
 	Service string `json:"service"`
 	Status  string `json:"status"`

@@ -34,7 +34,7 @@ spec:
         paths:
           # --- Identity Service ---
           # API: /api/v1/auth/* -> identity:8081/api/v1/auth/*
-          - path: /(api/v1/auth/.*)
+          - path: /(api/v1/auth.*)
             pathType: ImplementationSpecific
             backend:
               service:
@@ -42,7 +42,7 @@ spec:
                 port:
                   number: 8081
           # Admin API (Seed Users, etc) -> identity:8081/api/v1/admin/*
-          - path: /(api/v1/admin/.*)
+          - path: /(api/v1/admin.*)
             pathType: ImplementationSpecific
             backend:
               service:
@@ -50,7 +50,7 @@ spec:
                 port:
                   number: 8081
           # Swagger: /identity/swagger/* -> identity:8081/swagger/*
-          - path: /identity/(swagger/.*)
+          - path: /identity/(swagger.*)
             pathType: ImplementationSpecific
             backend:
               service:
@@ -60,7 +60,15 @@ spec:
 
           # --- Notification Service ---
           # API: /api/v1/notifications/* -> notification:8082/api/v1/notifications/*
-          - path: /(api/v1/notifications/.*)
+          - path: /(api/v1/notifications.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: notification-service
+                port:
+                  number: 8082
+          # Users: /api/v1/users/* -> notification:8082/api/v1/users/*
+          - path: /(api/v1/users.*)
             pathType: ImplementationSpecific
             backend:
               service:
@@ -68,7 +76,7 @@ spec:
                 port:
                   number: 8082
           # Swagger: /notification/swagger/* -> notification:8082/swagger/*
-          - path: /notification/(swagger/.*)
+          - path: /notification/(swagger.*)
             pathType: ImplementationSpecific
             backend:
               service:

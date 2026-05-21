@@ -14,7 +14,7 @@ data:
       "tags": ["microservices", "logs", "loki"],
       "timezone": "Asia/Ho_Chi_Minh",
       "schemaVersion": 38,
-      "version": 1,
+      "version": 2,
       "refresh": "10s",
       "time": {
         "from": "now-1h",
@@ -82,6 +82,17 @@ data:
             }
           },
           {
+            "name": "caller",
+            "label": "Caller (file filter)",
+            "type": "textbox",
+            "hide": 0,
+            "current": {
+              "selected": false,
+              "text": "",
+              "value": ""
+            }
+          },
+          {
             "name": "search",
             "label": "Search (msg / trace_id)",
             "type": "textbox",
@@ -112,12 +123,12 @@ data:
             "type": "loki",
             "uid": "${datasource}"
           },
-          "gridPos": {"h": 20, "w": 24, "x": 0, "y": 1},
+          "gridPos": {"h": 22, "w": 24, "x": 0, "y": 1},
           "options": {
             "showTime": true,
-            "showLabels": false,
+            "showLabels": true,
             "showCommonLabels": false,
-            "wrapLogMessage": true,
+            "wrapLogMessage": false,
             "prettifyLogMessage": false,
             "enableLogDetails": true,
             "dedupStrategy": "none",
@@ -132,7 +143,7 @@ data:
               },
               "editorMode": "code",
               "queryType": "range",
-              "expr": "{service=~\"$service\", level=~\"$level\"} | json |~ \"$search\""
+              "expr": "{service=~\"$service\", level=~\"$level\"} | json | caller=~\"${caller:pipe}.*\" | line_format \"[{{.level | upper}}] {{.service}} | {{.caller}} » {{.msg}}\" |~ \"$search\""
             }
           ]
         },
