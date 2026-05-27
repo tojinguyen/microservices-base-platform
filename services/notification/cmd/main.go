@@ -67,21 +67,22 @@ func main() {
 	// Khởi tạo OpenTelemetry Distributed Tracing
 	if cfg.Otel.Enabled {
 		endpoint := cfg.Otel.ExporterEndpoint
-		if endpoint == "" {
-			endpoint = "http://localhost:4318"
-		}
-		tp, err := trace.InitTracer(ctx, "notification-service", endpoint)
-		if err != nil {
-			log.Warn("failed to initialize OpenTelemetry tracer, tracing disabled", zap.Error(err))
+		if endpoint != "" {
+			tp, err := trace.InitTracer(ctx, "notification-service", endpoint)
+			if err != nil {
+				log.Warn("failed to initialize OpenTelemetry tracer, tracing disabled", zap.Error(err))
+			} else {
+				defer func() {
+					shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+					defer cancel()
+					if err := tp.Shutdown(shutdownCtx); err != nil {
+						log.Error("failed to shutdown tracer provider", zap.Error(err))
+					}
+				}()
+				log.Info("OpenTelemetry tracing initialized", zap.String("endpoint", endpoint))
+			}
 		} else {
-			defer func() {
-				shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-				defer cancel()
-				if err := tp.Shutdown(shutdownCtx); err != nil {
-					log.Error("failed to shutdown tracer provider", zap.Error(err))
-				}
-			}()
-			log.Info("OpenTelemetry tracing initialized", zap.String("endpoint", endpoint))
+			log.Warn("otel enabled but exporter endpoint is empty, tracing disabled")
 		}
 	}
 
@@ -103,8 +104,8 @@ func main() {
 	case notificationConfig.ModeAPI:
 		runAPI(ctx, cfg, database)
 	default:
-		log.Warn("Unknown app mode, falling back to API mode", zap.String("mode", cfg.AppMode))
-		runAPI(ctx, cfg, database)
+		log.Error("Unknown app mode, falling back to API mode", zap.String("mode", cfg.AppMode))
+		return
 	}
 }
 
@@ -135,10 +136,6 @@ func runAPI(ctx context.Context, cfg *notificationConfig.Config, database *gorm.
 	prefSvc := service.NewPreferenceService(prefRepo, cache)
 	notificationService := service.NewNotificationService(database, notificationRepo, outboxRepo, templateRepo, prefSvc, brokerClient, cfg)
 
-	if err := notificationService.SeedTemplates(context.Background()); err != nil {
-		log.Error("failed to seed notification templates", zap.Error(err))
-	}
-
 	scheduleRepo := repository.NewScheduleRepository(database)
 	schedulerSvc := service.NewSchedulerService(scheduleRepo, templateRepo, notificationService)
 
@@ -154,11 +151,15 @@ func runAPI(ctx context.Context, cfg *notificationConfig.Config, database *gorm.
 	campaignHandler := handler.NewCampaignHandler(campaignSvc)
 	dlqHandler := handler.NewDLQHandler(dlqSvc)
 
+	if err := notificationService.SeedTemplates(context.Background()); err != nil {
+		log.Error("failed to seed notification templates", zap.Error(err))
+	}
+
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
 	r.Use(gin.Recovery())
 	r.Use(logger.GinMiddleware())
-	r.Use(trace.TracerMiddleware("notification-service")) // OTel span cho mỗi HTTP request
+	r.Use(trace.TracerMiddleware("notification-service")) // OTel span for each HTTP request
 	route.RegisterRoutes(r, notificationHandler, preferenceHandler, scheduleHandler, campaignHandler, dlqHandler, limiter, cfg.RateLimit)
 
 	srv := &http.Server{
@@ -182,8 +183,6 @@ func runAPI(ctx context.Context, cfg *notificationConfig.Config, database *gorm.
 	}
 	log.Info("API server gracefully stopped")
 }
-
-
 
 func runEmailWorker(ctx context.Context, cfg *notificationConfig.Config, database *gorm.DB) {
 	log := logger.L()

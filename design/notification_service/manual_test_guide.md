@@ -1,5 +1,9 @@
 # 🧪 Notification Service — Hướng Dẫn Test Manual
 
+Note:
+- Học kĩ lại cơ chế của Rabbitmq
+- Xem lại cơ chế trace của Otel 
+
 > **Mục tiêu:** Học kiến trúc, flow, và các công nghệ (RabbitMQ, Outbox, Circuit Breaker, ...) thông qua việc tự tay test và quan sát hệ thống phản ứng như thế nào.
 
 ---
