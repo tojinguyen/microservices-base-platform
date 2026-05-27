@@ -3,7 +3,7 @@ SHELL := bash
 # Detect existing Kind cluster at parse time
 _KIND_CLUSTERS := $(shell kind get clusters 2>/dev/null)
 
-.PHONY: build build-identity build-notification \
+.PHONY: build build-identity build-notification build-upload \
 	up down logs clean migrate-add \
 	k8s-up k8s-pause k8s-destroy setup-all \
 	deploy deploy-identity deploy-notification \
@@ -32,7 +32,7 @@ logs:
 # Build Docker Images
 # ==========================================
 
-build: build-identity build-notification
+build: build-identity build-notification build-upload
 
 build-identity:
 	@echo "Building identity service docker image..."
@@ -41,6 +41,10 @@ build-identity:
 build-notification:
 	@echo "Building notification service docker image..."
 	docker build -t notification-service -f services/notification/Dockerfile .
+
+build-upload:
+	@echo "Building upload service docker image..."
+	docker build -t upload-service -f services/upload/Dockerfile .
 
 # ==========================================
 # Database Migration
@@ -106,7 +110,7 @@ deploy:
 	kubectl apply -f k8s/infrastructure/ -R
 	kubectl apply -f k8s/services/ -R
 	kubectl apply -f k8s/tools/ -R
-	$(MAKE) deploy-identity deploy-notification
+	$(MAKE) deploy-identity deploy-notification deploy-upload
 	@echo "All services deployed successfully!"
 
 deploy-identity: build-identity
@@ -123,6 +127,14 @@ deploy-notification: build-notification
 		deployment/notification-worker-email \
 		deployment/notification-worker-webhook \
 		deployment/notification-worker-outbox \
+		-n microservices-platform
+
+deploy-upload: build-upload
+	@echo "Loading upload-service image into kind cluster..."
+	kind load docker-image upload-service:latest --name desktop
+	kubectl rollout restart \
+		deployment/upload-api \
+		deployment/upload-worker-janitor \
 		-n microservices-platform
 
 # ==========================================
