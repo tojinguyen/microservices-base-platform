@@ -2,6 +2,7 @@ package trace
 
 import (
 	"context"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"go.opentelemetry.io/otel"
@@ -12,7 +13,42 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 	"go.opentelemetry.io/otel/trace"
+	"go.uber.org/zap"
 )
+
+// Setup khởi tạo OpenTelemetry TracerProvider (nếu enabled và endpoint hợp lệ)
+// và trả về hàm shutdown để caller defer. Hàm shutdown luôn an toàn để gọi,
+// kể cả khi tracing bị tắt hoặc khởi tạo thất bại (no-op).
+//
+// Ví dụ sử dụng:
+//
+//	shutdown := trace.Setup(ctx, log, "notification-service", cfg.Otel.Enabled, cfg.Otel.ExporterEndpoint)
+//	defer shutdown()
+func Setup(ctx context.Context, log *zap.Logger, serviceName string, enabled bool, endpoint string) func() {
+	noop := func() {}
+	if !enabled {
+		return noop
+	}
+	if endpoint == "" {
+		log.Warn("otel enabled but exporter endpoint is empty, tracing disabled")
+		return noop
+	}
+
+	tp, err := InitTracer(ctx, serviceName, endpoint)
+	if err != nil {
+		log.Warn("failed to initialize OpenTelemetry tracer, tracing disabled", zap.Error(err))
+		return noop
+	}
+
+	log.Info("OpenTelemetry tracing initialized", zap.String("endpoint", endpoint))
+	return func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := tp.Shutdown(shutdownCtx); err != nil {
+			log.Error("failed to shutdown tracer provider", zap.Error(err))
+		}
+	}
+}
 
 // InitTracer khởi tạo OpenTelemetry TracerProvider với OTLP HTTP exporter.
 // Trả về provider để caller có thể gọi defer tp.Shutdown(ctx) khi tắt ứng dụng.

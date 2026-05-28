@@ -53,18 +53,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	if cfg.Otel.Enabled && cfg.Otel.ExporterEndpoint != "" {
-		tp, err := trace.InitTracer(ctx, "transcoder-service", cfg.Otel.ExporterEndpoint)
-		if err != nil {
-			log.Warn("failed to init OTel tracer", zap.Error(err))
-		} else {
-			defer func() {
-				shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-				defer cancel()
-				_ = tp.Shutdown(shutdownCtx)
-			}()
-		}
-	}
+	defer trace.Setup(ctx, log, "transcoder-service", cfg.Otel.Enabled, cfg.Otel.ExporterEndpoint)()
 
 	brokerClient, err := broker.NewRabbitMQ(cfg.Broker)
 	if err != nil {

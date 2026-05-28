@@ -65,21 +65,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	if cfg.Otel.Enabled && cfg.Otel.ExporterEndpoint != "" {
-		tp, err := trace.InitTracer(ctx, "upload-service", cfg.Otel.ExporterEndpoint)
-		if err != nil {
-			log.Warn("failed to initialize OpenTelemetry tracer, tracing disabled", zap.Error(err))
-		} else {
-			defer func() {
-				shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-				defer cancel()
-				if err := tp.Shutdown(shutdownCtx); err != nil {
-					log.Error("failed to shutdown tracer provider", zap.Error(err))
-				}
-			}()
-			log.Info("OpenTelemetry tracing initialized", zap.String("endpoint", cfg.Otel.ExporterEndpoint))
-		}
-	}
+	defer trace.Setup(ctx, log, "upload-service", cfg.Otel.Enabled, cfg.Otel.ExporterEndpoint)()
 
 	log.Info("Starting upload service", zap.String("mode", cfg.AppMode))
 

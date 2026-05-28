@@ -64,27 +64,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	// Khởi tạo OpenTelemetry Distributed Tracing
-	if cfg.Otel.Enabled {
-		endpoint := cfg.Otel.ExporterEndpoint
-		if endpoint != "" {
-			tp, err := trace.InitTracer(ctx, "notification-service", endpoint)
-			if err != nil {
-				log.Warn("failed to initialize OpenTelemetry tracer, tracing disabled", zap.Error(err))
-			} else {
-				defer func() {
-					shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-					defer cancel()
-					if err := tp.Shutdown(shutdownCtx); err != nil {
-						log.Error("failed to shutdown tracer provider", zap.Error(err))
-					}
-				}()
-				log.Info("OpenTelemetry tracing initialized", zap.String("endpoint", endpoint))
-			}
-		} else {
-			log.Warn("otel enabled but exporter endpoint is empty, tracing disabled")
-		}
-	}
+	defer trace.Setup(ctx, log, "notification-service", cfg.Otel.Enabled, cfg.Otel.ExporterEndpoint)()
 
 	log.Info("Starting notification service", zap.String("mode", cfg.AppMode))
 
