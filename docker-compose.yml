@@ -262,8 +262,50 @@ services:
       - STORAGE_ENDPOINT=http://minio:9000
       - STORAGE_PUBLIC_URL=http://localhost:9000/videos
 
+  postgres-transcoder:
+    image: postgres:15-alpine
+    container_name: transcoder-postgres
+    environment:
+      POSTGRES_USER: user_admin
+      POSTGRES_PASSWORD: password123
+      POSTGRES_DB: transcoder_db
+    ports:
+      - "5435:5432"
+    volumes:
+      - postgres_transcoder_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U user_admin -d transcoder_db" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  transcoder-worker:
+    image: transcoder-service
+    build:
+      context: .
+      dockerfile: services/transcoder/Dockerfile
+    container_name: transcoder-worker
+    depends_on:
+      postgres-transcoder:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    env_file:
+      - services/transcoder/.env
+    environment:
+      - APP_MODE=worker
+      - DATABASE_HOST=postgres-transcoder
+      - BROKER_HOST=rabbitmq
+      - STORAGE_ENDPOINT=http://minio:9000
+    volumes:
+      - transcoder_tmp:/tmp/transcoder
+
 volumes:
   postgres_data:
   postgres_notification_data:
   postgres_upload_data:
+  postgres_transcoder_data:
+  transcoder_tmp:
   minio_data:

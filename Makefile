@@ -3,10 +3,10 @@ SHELL := bash
 # Detect existing Kind cluster at parse time
 _KIND_CLUSTERS := $(shell kind get clusters 2>/dev/null)
 
-.PHONY: build build-identity build-notification build-upload \
+.PHONY: build build-identity build-notification build-upload build-transcoder \
 	up down logs clean migrate-add \
 	k8s-up k8s-pause k8s-destroy setup-all \
-	deploy deploy-identity deploy-notification \
+	deploy deploy-identity deploy-notification deploy-transcoder \
 	ingress-install \
 	loki-install loki-uninstall monitoring-upgrade \
 	dashboard-apply \
@@ -32,7 +32,7 @@ logs:
 # Build Docker Images
 # ==========================================
 
-build: build-identity build-notification build-upload
+build: build-identity build-notification build-upload build-transcoder
 
 build-identity:
 	@echo "Building identity service docker image..."
@@ -45,6 +45,10 @@ build-notification:
 build-upload:
 	@echo "Building upload service docker image..."
 	docker build -t upload-service -f services/upload/Dockerfile .
+
+build-transcoder:
+	@echo "Building transcoder service docker image..."
+	docker build -t transcoder-service -f services/transcoder/Dockerfile .
 
 # ==========================================
 # Database Migration
@@ -110,7 +114,7 @@ deploy:
 	kubectl apply -f k8s/infrastructure/ -R
 	kubectl apply -f k8s/services/ -R
 	kubectl apply -f k8s/tools/ -R
-	$(MAKE) deploy-identity deploy-notification deploy-upload
+	$(MAKE) deploy-identity deploy-notification deploy-upload deploy-transcoder
 	@echo "All services deployed successfully!"
 
 deploy-identity: build-identity
@@ -135,6 +139,13 @@ deploy-upload: build-upload
 	kubectl rollout restart \
 		deployment/upload-api \
 		deployment/upload-worker-janitor \
+		-n microservices-platform
+
+deploy-transcoder: build-transcoder
+	@echo "Loading transcoder-service image into kind cluster..."
+	kind load docker-image transcoder-service:latest --name desktop
+	kubectl rollout restart \
+		deployment/transcoder-worker \
 		-n microservices-platform
 
 # ==========================================
