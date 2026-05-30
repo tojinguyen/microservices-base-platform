@@ -45,12 +45,17 @@ spec:
           volumeMounts:
             - name: cloudbeaver-data
               mountPath: /opt/cloudbeaver/workspace/.data
+            
+            # ĐƯA FILE NÀY VÀO GLOBAL CONFIGURATION ĐỂ SKIP WIZARD
             - name: cloudbeaver-config-volume
-              mountPath: /opt/cloudbeaver/conf/cloudbeaver.conf
+              mountPath: /opt/cloudbeaver/workspace/GlobalConfiguration/cloudbeaver.conf
               subPath: cloudbeaver.conf
+            
+            # Giữ nguyên đường dẫn này vì trong file config đang trỏ tới đây
             - name: cloudbeaver-config-volume
               mountPath: /opt/cloudbeaver/conf/initial-data.conf
               subPath: initial-data.conf
+              
             - name: cloudbeaver-config-volume
               mountPath: /opt/cloudbeaver/workspace/GlobalConfiguration/.dbeaver/data-sources.json
               subPath: data-sources.json
