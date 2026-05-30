@@ -19,8 +19,8 @@ _KIND_CLUSTERS := $(shell kind get clusters 2>/dev/null)
 
 proto:
 	@echo "Generating gRPC code from proto files..."
-	mkdir -p pkg/userpb
-	PATH="$$PATH:$(shell go env GOPATH)/bin" $(shell echo $$TEMP)/protoc/bin/protoc \
+	@mkdir -p pkg/userpb
+	@PATH="$$PATH:$$(go env GOPATH)/bin" protoc \
 		--proto_path=proto \
 		--go_out=pkg/userpb \
 		--go_opt=paths=source_relative \
