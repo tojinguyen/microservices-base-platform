@@ -130,7 +130,7 @@ deploy:
 	kubectl apply -f k8s/infrastructure/ -R
 	kubectl apply -f k8s/services/ -R
 	kubectl apply -f k8s/tools/ -R
-	$(MAKE) deploy-identity deploy-notification deploy-upload deploy-transcoder
+	$(MAKE) deploy-identity deploy-notification
 	@echo "All services deployed successfully!"
 
 deploy-identity: build-identity
