@@ -16,6 +16,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	identity_config "github.com/tojinguyen/identity/internal/config"
+	identitygrpc "github.com/tojinguyen/identity/internal/grpc"
 	"github.com/tojinguyen/identity/internal/handler"
 	"github.com/tojinguyen/identity/internal/repository"
 	"github.com/tojinguyen/identity/internal/route"
@@ -69,6 +70,15 @@ func main() {
 	seedService := service.NewSeedService(userRepo)
 	seedHandler := handler.NewSeedHandler(seedService)
 
+	// Start gRPC server for inter-service streaming (e.g. campaign user stream).
+	grpcPort := cfg.GRPCPort
+	grpcServer := identitygrpc.NewServer(userRepo)
+	go func() {
+		if err := identitygrpc.ListenAndServe(grpcServer, grpcPort); err != nil {
+			log.Fatal("gRPC server failed", zap.Error(err))
+		}
+	}()
+
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
 
@@ -92,6 +102,8 @@ func main() {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
+
+	grpcServer.GracefulStop()
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(cfg.TimeGrace)*time.Second)
 	defer cancel()

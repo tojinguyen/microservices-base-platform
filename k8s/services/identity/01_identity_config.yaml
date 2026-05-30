@@ -5,6 +5,7 @@ metadata:
   namespace: microservices-platform
 data:
   PORT: "8080"
+  GRPC_PORT: "50051"
   TIME_GRACE: "10"
   DATABASE_HOST: "postgres-identity-service"
   DATABASE_PORT: "5432"

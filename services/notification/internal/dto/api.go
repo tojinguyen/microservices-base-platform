@@ -114,9 +114,11 @@ type DeleteScheduleRequest struct {
 
 // --- Campaign DTOs ---
 
-type RecipientInput struct {
-	UserID    string `json:"user_id"   binding:"required"`
-	Recipient string `json:"recipient" binding:"required"`
+// UserFilter specifies optional criteria for selecting campaign recipients.
+// All fields are optional; omitting them selects all users.
+type UserFilter struct {
+	// Role filters by user role (e.g. "user", "admin"). Empty string = all roles.
+	Role string `json:"role,omitempty"`
 }
 
 type CreateCampaignRequest struct {
@@ -126,8 +128,8 @@ type CreateCampaignRequest struct {
 	Channel        domain.NotificationChannel `json:"channel"         binding:"required"`
 	EventType      domain.EventType           `json:"event_type"      binding:"required"`
 	ScheduledAt    time.Time                  `json:"scheduled_at"    binding:"required"`
-	TargetAudience string                     `json:"target_audience"` // e.g., "all_users", "specific"
-	Recipients     []RecipientInput           `json:"recipients"`      // Optional, only used when TargetAudience == "specific"
+	TargetAudience string                     `json:"target_audience"` // "all_users" (default)
+	Filter         UserFilter                 `json:"filter,omitempty"`
 }
 
 type CreateCampaignResponse struct {
@@ -141,7 +143,7 @@ type CampaignStatsResponse struct {
 	CampaignID           string                `json:"campaign_id"`
 	Status               domain.CampaignStatus `json:"status"`
 	TotalRecipients      int                   `json:"total_recipients"`
-	LastDispatchedOffset int                   `json:"last_dispatched_offset"`
+	LastDispatchedCursor string                `json:"last_dispatched_cursor"`
 	DispatchedCount      int                   `json:"dispatched_count"`
 	SentCount            int                   `json:"sent_count"`
 	FailedCount          int                   `json:"failed_count"`

@@ -19,6 +19,7 @@ import (
 	"github.com/gin-gonic/gin"
 	_ "github.com/tojinguyen/notification/docs"
 	notificationConfig "github.com/tojinguyen/notification/internal/config"
+	notifgrpc "github.com/tojinguyen/notification/internal/grpc"
 	"github.com/tojinguyen/notification/internal/handler"
 	"github.com/tojinguyen/notification/internal/repository"
 	"github.com/tojinguyen/notification/internal/route"
@@ -188,10 +189,17 @@ func runCampaignWorker(ctx context.Context, cfg *notificationConfig.Config, data
 	}
 	defer brokerClient.Close()
 
-	campaignRepo := repository.NewCampaignRepository(database)
-	campaignWorker := worker.NewCampaignWorker(campaignRepo, brokerClient, cfg)
+	identityAddr := cfg.IdentityGRPCAddr
+	identityClient, err := notifgrpc.NewIdentityClient(identityAddr)
+	if err != nil {
+		log.Panic("failed to dial identity gRPC", zap.String("addr", identityAddr), zap.Error(err))
+	}
+	defer identityClient.Close()
 
-	log.Info("Campaign worker starting")
+	campaignRepo := repository.NewCampaignRepository(database)
+	campaignWorker := worker.NewCampaignWorker(campaignRepo, brokerClient, cfg, identityClient)
+
+	log.Info("Campaign worker starting", zap.String("identity_grpc", identityAddr))
 	campaignWorker.Start(ctx)
 }
 

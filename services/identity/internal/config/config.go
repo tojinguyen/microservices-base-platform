@@ -9,6 +9,7 @@ import (
 type Config struct {
 	TimeGrace   int               `mapstructure:"time_grace"`
 	ServerPort  int               `mapstructure:"port"`
+	GRPCPort    int               `mapstructure:"grpc_port"`
 	Database    db.Config         `mapstructure:"database"`
 	JWT         auth.Config       `mapstructure:"jwt"`
 	GoogleOAuth GoogleOAuthConfig `mapstructure:"google_oauth"`

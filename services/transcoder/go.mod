@@ -9,7 +9,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.79.3
 	github.com/google/uuid v1.6.0
 	go.uber.org/zap v1.27.1
-	golang.org/x/sync v0.19.0
+	golang.org/x/sync v0.20.0
 	gorm.io/gorm v1.31.1
 )
 
@@ -30,6 +30,7 @@ require (
 	github.com/aws/smithy-go v1.22.2 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
-	go.uber.org/multierr v1.10.0 // indirect
-	golang.org/x/text v0.20.0 // indirect
+	github.com/stretchr/testify v1.11.1 // indirect
+	go.uber.org/multierr v1.11.0 // indirect
+	golang.org/x/text v0.36.0 // indirect
 )

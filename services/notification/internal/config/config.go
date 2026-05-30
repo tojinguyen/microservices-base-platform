@@ -19,17 +19,18 @@ const (
 )
 
 type Config struct {
-	AppMode    string          `mapstructure:"app_mode"`
-	TimeGrace  int             `mapstructure:"time_grace"`
-	ServerPort int             `mapstructure:"port"`
-	Database   db.Config       `mapstructure:"database"`
-	Redis      redis.Config    `mapstructure:"redis"`
-	Broker     broker.Config   `mapstructure:"broker"`
-	SMTP       SMTPConfig      `mapstructure:"smtp"`
-	Queue      QueueConfig     `mapstructure:"queue"`
-	Worker     WorkerConfig    `mapstructure:"worker"`
-	RateLimit  RateLimitConfig `mapstructure:"rate_limit"`
-	Otel       OtelConfig      `mapstructure:"otel"`
+	AppMode          string          `mapstructure:"app_mode"`
+	TimeGrace        int             `mapstructure:"time_grace"`
+	ServerPort       int             `mapstructure:"port"`
+	IdentityGRPCAddr string          `mapstructure:"identity_grpc_addr"`
+	Database         db.Config       `mapstructure:"database"`
+	Redis            redis.Config    `mapstructure:"redis"`
+	Broker           broker.Config   `mapstructure:"broker"`
+	SMTP             SMTPConfig      `mapstructure:"smtp"`
+	Queue            QueueConfig     `mapstructure:"queue"`
+	Worker           WorkerConfig    `mapstructure:"worker"`
+	RateLimit        RateLimitConfig `mapstructure:"rate_limit"`
+	Otel             OtelConfig      `mapstructure:"otel"`
 }
 
 type OtelConfig struct {

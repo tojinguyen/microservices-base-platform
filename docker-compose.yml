@@ -94,6 +94,7 @@ services:
     container_name: identity-service
     ports:
       - "8080:8080"
+      - "50051:50051"
     depends_on:
       postgres-db:
         condition: service_healthy
@@ -105,6 +106,7 @@ services:
       # Overriding localhost from .env to use the internal docker network host
       - DATABASE_HOST=postgres-db
       - REDIS_HOST=redis-cache
+      - GRPC_PORT=50051
 
   notification-service:
     image: notification-service
@@ -166,6 +168,24 @@ services:
       - services/notification/.env
     environment:
       - APP_MODE=worker-webhook
+      - OTEL_ENABLED=true
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
+
+  notification-worker-campaign:
+    image: notification-service
+    container_name: notification-worker-campaign
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      postgres-notification:
+        condition: service_healthy
+      identity-service:
+        condition: service_started
+    env_file:
+      - services/notification/.env
+    environment:
+      - APP_MODE=worker-campaign
+      - IDENTITY_GRPC_ADDR=identity-service:50051
       - OTEL_ENABLED=true
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
 

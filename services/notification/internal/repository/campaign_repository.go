@@ -11,28 +11,28 @@ import (
 )
 
 type CampaignStats struct {
-	TotalRecipients      int `json:"total_recipients"`
-	LastDispatchedOffset int `json:"last_dispatched_offset"`
-	DispatchedCount      int `json:"dispatched_count"`
-	SentCount            int `json:"sent_count"`
-	FailedCount          int `json:"failed_count"`
-	PendingCount         int `json:"pending_count"`
+	TotalRecipients      int    `json:"total_recipients"`
+	LastDispatchedCursor string `json:"last_dispatched_cursor"`
+	DispatchedCount      int    `json:"dispatched_count"`
+	SentCount            int    `json:"sent_count"`
+	FailedCount          int    `json:"failed_count"`
+	PendingCount         int    `json:"pending_count"`
 }
 
 type CampaignRepository interface {
 	// Admin API
-	CreateCampaignWithRecipients(ctx context.Context, campaign *domain.Campaign, recipients []*domain.CampaignRecipient) error
+	CreateCampaign(ctx context.Context, campaign *domain.Campaign) error
 	GetCampaignByID(ctx context.Context, id uuid.UUID) (*domain.Campaign, error)
 	GetCampaignStats(ctx context.Context, id uuid.UUID) (*CampaignStats, error)
 
 	// Dispatcher
 	ClaimPendingCampaign(ctx context.Context) (*domain.Campaign, error)
-	GetRecipientsBatch(ctx context.Context, campaignID uuid.UUID, offset, limit int) ([]*domain.CampaignRecipient, error)
-	CheckpointDispatch(ctx context.Context, campaignID uuid.UUID, batchSize int) error
+	SetTotalRecipients(ctx context.Context, campaignID uuid.UUID, count int64) error
+	CheckpointDispatch(ctx context.Context, campaignID uuid.UUID, cursor string, batchSize int) error
 	MarkCampaignStatus(ctx context.Context, campaignID uuid.UUID, status domain.CampaignStatus) error
 
-	// Email worker
-	UpdateRecipientStatus(ctx context.Context, campaignID uuid.UUID, userID string, status domain.CampaignRecipientStatus) error
+	// Email worker — inserts a recipient audit record after the email is sent.
+	CreateRecipient(ctx context.Context, recipient *domain.CampaignRecipient) error
 	IncrementCampaignCounter(ctx context.Context, campaignID uuid.UUID, field string) error
 }
 
@@ -44,19 +44,8 @@ func NewCampaignRepository(db *gorm.DB) CampaignRepository {
 	return &campaignRepository{db: db}
 }
 
-// CreateCampaignWithRecipients writes campaign + recipients atomically and sets total_recipients.
-func (r *campaignRepository) CreateCampaignWithRecipients(ctx context.Context, campaign *domain.Campaign, recipients []*domain.CampaignRecipient) error {
-	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		campaign.TotalRecipients = len(recipients)
-		if err := tx.Create(campaign).Error; err != nil {
-			return err
-		}
-		for i := range recipients {
-			recipients[i].CampaignID = campaign.Id
-		}
-		// Batch-insert in chunks to stay under Postgres max-parameters limit.
-		return tx.CreateInBatches(recipients, 500).Error
-	})
+func (r *campaignRepository) CreateCampaign(ctx context.Context, campaign *domain.Campaign) error {
+	return r.db.WithContext(ctx).Create(campaign).Error
 }
 
 func (r *campaignRepository) GetCampaignByID(ctx context.Context, id uuid.UUID) (*domain.Campaign, error) {
@@ -72,13 +61,13 @@ func (r *campaignRepository) GetCampaignStats(ctx context.Context, id uuid.UUID)
 	if err := r.db.WithContext(ctx).First(&campaign, "id = ?", id).Error; err != nil {
 		return nil, err
 	}
-	pending := campaign.TotalRecipients - campaign.LastDispatchedOffset
+	pending := campaign.TotalRecipients - campaign.SentCount - campaign.FailedCount
 	if pending < 0 {
 		pending = 0
 	}
 	return &CampaignStats{
 		TotalRecipients:      campaign.TotalRecipients,
-		LastDispatchedOffset: campaign.LastDispatchedOffset,
+		LastDispatchedCursor: campaign.LastDispatchedCursor,
 		DispatchedCount:      campaign.DispatchedCount,
 		SentCount:            campaign.SentCount,
 		FailedCount:          campaign.FailedCount,
@@ -103,7 +92,7 @@ func (r *campaignRepository) ClaimPendingCampaign(ctx context.Context) (*domain.
 			return err
 		}
 		if campaign.Id == (uuid.UUID{}) {
-			return nil // nothing to dispatch
+			return nil
 		}
 		return tx.Model(&campaign).Updates(map[string]interface{}{
 			"status":     domain.CampaignStatusDispatching,
@@ -119,25 +108,24 @@ func (r *campaignRepository) ClaimPendingCampaign(ctx context.Context) (*domain.
 	return &campaign, nil
 }
 
-// GetRecipientsBatch returns pending recipients page by offset for the dispatcher.
-func (r *campaignRepository) GetRecipientsBatch(ctx context.Context, campaignID uuid.UUID, offset, limit int) ([]*domain.CampaignRecipient, error) {
-	var recipients []*domain.CampaignRecipient
-	err := r.db.WithContext(ctx).
-		Where("campaign_id = ? AND status = 'pending'", campaignID).
-		Order("created_at ASC, id ASC").
-		Offset(offset).Limit(limit).
-		Find(&recipients).Error
-	return recipients, err
-}
-
-// CheckpointDispatch atomically advances last_dispatched_offset and dispatched_count
-// after a batch has been successfully published.
-func (r *campaignRepository) CheckpointDispatch(ctx context.Context, campaignID uuid.UUID, batchSize int) error {
+func (r *campaignRepository) SetTotalRecipients(ctx context.Context, campaignID uuid.UUID, count int64) error {
 	return r.db.WithContext(ctx).
 		Model(&domain.Campaign{}).
 		Where("id = ?", campaignID).
 		Updates(map[string]interface{}{
-			"last_dispatched_offset": gorm.Expr("last_dispatched_offset + ?", batchSize),
+			"total_recipients": count,
+			"updated_at":       time.Now().UTC(),
+		}).Error
+}
+
+// CheckpointDispatch saves the cursor of the last dispatched user and advances
+// dispatched_count after a batch has been successfully published to RabbitMQ.
+func (r *campaignRepository) CheckpointDispatch(ctx context.Context, campaignID uuid.UUID, cursor string, batchSize int) error {
+	return r.db.WithContext(ctx).
+		Model(&domain.Campaign{}).
+		Where("id = ?", campaignID).
+		Updates(map[string]interface{}{
+			"last_dispatched_cursor": cursor,
 			"dispatched_count":       gorm.Expr("dispatched_count + ?", batchSize),
 			"updated_at":             time.Now().UTC(),
 		}).Error
@@ -153,15 +141,9 @@ func (r *campaignRepository) MarkCampaignStatus(ctx context.Context, campaignID 
 		}).Error
 }
 
-// UpdateRecipientStatus is called by the email worker to mark a recipient sent/failed.
-func (r *campaignRepository) UpdateRecipientStatus(ctx context.Context, campaignID uuid.UUID, userID string, status domain.CampaignRecipientStatus) error {
-	return r.db.WithContext(ctx).
-		Model(&domain.CampaignRecipient{}).
-		Where("campaign_id = ? AND user_id = ?", campaignID, userID).
-		Updates(map[string]interface{}{
-			"status":     status,
-			"updated_at": time.Now().UTC(),
-		}).Error
+// CreateRecipient inserts an audit record after the email worker sends (or fails) a campaign email.
+func (r *campaignRepository) CreateRecipient(ctx context.Context, recipient *domain.CampaignRecipient) error {
+	return r.db.WithContext(ctx).Create(recipient).Error
 }
 
 // IncrementCampaignCounter increments sent_count or failed_count by 1.

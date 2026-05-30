@@ -3,7 +3,7 @@ SHELL := bash
 # Detect existing Kind cluster at parse time
 _KIND_CLUSTERS := $(shell kind get clusters 2>/dev/null)
 
-.PHONY: build build-identity build-notification build-upload build-transcoder \
+.PHONY: proto build build-identity build-notification build-upload build-transcoder \
 	up down logs clean migrate-add \
 	k8s-up k8s-pause k8s-destroy setup-all \
 	deploy deploy-identity deploy-notification deploy-transcoder \
@@ -12,6 +12,22 @@ _KIND_CLUSTERS := $(shell kind get clusters 2>/dev/null)
 	dashboard-apply \
 	prometheus-install prometheus-uninstall \
 	tools-deploy tools-remove
+
+# ==========================================
+# Proto code generation
+# ==========================================
+
+proto:
+	@echo "Generating gRPC code from proto files..."
+	mkdir -p pkg/userpb
+	PATH="$$PATH:$(shell go env GOPATH)/bin" $(shell echo $$TEMP)/protoc/bin/protoc \
+		--proto_path=proto \
+		--go_out=pkg/userpb \
+		--go_opt=paths=source_relative \
+		--go-grpc_out=pkg/userpb \
+		--go-grpc_opt=paths=source_relative \
+		proto/user_service.proto
+	@echo "Proto generation complete."
 
 # ==========================================
 # Docker Compose (local dev)

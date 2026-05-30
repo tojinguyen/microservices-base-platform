@@ -211,14 +211,14 @@ func (w *EmailWorker) HandleCampaignMessage(ctx context.Context, body []byte) er
 			zap.Error(sendErr),
 		)
 		w.insertCampaignAudit(ctx, task, domain.NotificationStatusFailed, sendErr.Error())
-		_ = w.campaignRepo.UpdateRecipientStatus(ctx, campaignID, task.UserID, domain.CampaignRecipientStatusFailed)
+		w.insertCampaignRecipient(ctx, campaignID, task.UserID, task.Recipient, domain.CampaignRecipientStatusFailed)
 		_ = w.campaignRepo.IncrementCampaignCounter(ctx, campaignID, "failed_count")
 		return sendErr
 	}
 
 	now := time.Now().UTC()
 	w.insertCampaignAudit(ctx, task, domain.NotificationStatusSent, "")
-	_ = w.campaignRepo.UpdateRecipientStatus(ctx, campaignID, task.UserID, domain.CampaignRecipientStatusSent)
+	w.insertCampaignRecipient(ctx, campaignID, task.UserID, task.Recipient, domain.CampaignRecipientStatusSent)
 	_ = w.campaignRepo.IncrementCampaignCounter(ctx, campaignID, "sent_count")
 
 	log.Info("campaign email sent",
@@ -253,6 +253,24 @@ func (w *EmailWorker) insertCampaignAudit(ctx context.Context, task dto.Campaign
 	if _, err := w.repo.Create(ctx, notification); err != nil {
 		log.Error("failed to insert campaign audit notification",
 			zap.String("campaign_id", task.CampaignID),
+			zap.Error(err),
+		)
+	}
+}
+
+// insertCampaignRecipient writes a post-send audit record to campaign_recipients.
+// Failures are logged but not propagated — the audit log is best-effort.
+func (w *EmailWorker) insertCampaignRecipient(ctx context.Context, campaignID uuid.UUID, userID, recipient string, status domain.CampaignRecipientStatus) {
+	r := &domain.CampaignRecipient{
+		CampaignID: campaignID,
+		UserID:     userID,
+		Recipient:  recipient,
+		Status:     status,
+	}
+	if err := w.campaignRepo.CreateRecipient(ctx, r); err != nil {
+		logger.L().Error("failed to insert campaign recipient",
+			zap.String("campaign_id", campaignID.String()),
+			zap.String("user_id", userID),
 			zap.Error(err),
 		)
 	}

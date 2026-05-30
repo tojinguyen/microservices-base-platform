@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -34,7 +35,12 @@ func (s *campaignService) CreateCampaign(ctx context.Context, req dto.CreateCamp
 
 	targetAudience := req.TargetAudience
 	if targetAudience == "" {
-		targetAudience = "specific"
+		targetAudience = "all_users"
+	}
+
+	filterJSON, err := json.Marshal(req.Filter)
+	if err != nil {
+		return dto.CreateCampaignResponse{}, fmt.Errorf("invalid filter: %w", err)
 	}
 
 	campaign := &domain.Campaign{
@@ -44,35 +50,24 @@ func (s *campaignService) CreateCampaign(ctx context.Context, req dto.CreateCamp
 		Channel:        req.Channel,
 		EventType:      req.EventType,
 		TargetAudience: targetAudience,
+		FilterCriteria: string(filterJSON),
 		Status:         domain.CampaignStatusPending,
 		ScheduledAt:    req.ScheduledAt.UTC(),
 	}
 
-	var recipients []*domain.CampaignRecipient
-	if targetAudience == "specific" {
-		recipients = make([]*domain.CampaignRecipient, len(req.Recipients))
-		for i, r := range req.Recipients {
-			recipients[i] = &domain.CampaignRecipient{
-				UserID:    r.UserID,
-				Recipient: r.Recipient,
-				Status:    domain.CampaignRecipientStatusPending,
-			}
-		}
-	}
-
-	if err := s.repo.CreateCampaignWithRecipients(ctx, campaign, recipients); err != nil {
+	if err := s.repo.CreateCampaign(ctx, campaign); err != nil {
 		return dto.CreateCampaignResponse{}, err
 	}
 
 	logger.L().Info("campaign created",
 		zap.String("id", campaign.Id.String()),
-		zap.Int("recipients", campaign.TotalRecipients),
+		zap.String("target_audience", targetAudience),
 		zap.Time("scheduled_at", campaign.ScheduledAt),
 	)
 
 	return dto.CreateCampaignResponse{
 		CampaignID:      campaign.Id.String(),
-		TotalRecipients: campaign.TotalRecipients,
+		TotalRecipients: 0, // will be set by the campaign worker before dispatch
 		ScheduledAt:     campaign.ScheduledAt,
 		Message:         "campaign created successfully",
 	}, nil
@@ -103,7 +98,7 @@ func (s *campaignService) GetCampaignStats(ctx context.Context, campaignID strin
 		CampaignID:           campaign.Id.String(),
 		Status:               campaign.Status,
 		TotalRecipients:      stats.TotalRecipients,
-		LastDispatchedOffset: stats.LastDispatchedOffset,
+		LastDispatchedCursor: stats.LastDispatchedCursor,
 		DispatchedCount:      stats.DispatchedCount,
 		SentCount:            stats.SentCount,
 		FailedCount:          stats.FailedCount,

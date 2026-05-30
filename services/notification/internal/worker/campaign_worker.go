@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"github.com/tojinguyen/notification/internal/config"
 	"github.com/tojinguyen/notification/internal/domain"
 	"github.com/tojinguyen/notification/internal/dto"
+	notifgrpc "github.com/tojinguyen/notification/internal/grpc"
 	"github.com/tojinguyen/notification/internal/repository"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -28,14 +30,25 @@ var campaignEmailQueueArgs = map[string]interface{}{
 	"x-overflow":   "reject-publish",
 }
 
-type CampaignWorker struct {
-	repo   repository.CampaignRepository
-	broker broker.Broker
-	cfg    *config.Config
+// userFilter mirrors the JSON stored in campaign.filter_criteria.
+type userFilter struct {
+	Role string `json:"role"`
 }
 
-func NewCampaignWorker(repo repository.CampaignRepository, b broker.Broker, cfg *config.Config) *CampaignWorker {
-	return &CampaignWorker{repo: repo, broker: b, cfg: cfg}
+type CampaignWorker struct {
+	repo           repository.CampaignRepository
+	broker         broker.Broker
+	cfg            *config.Config
+	identityClient notifgrpc.IdentityClient
+}
+
+func NewCampaignWorker(repo repository.CampaignRepository, b broker.Broker, cfg *config.Config, identityClient notifgrpc.IdentityClient) *CampaignWorker {
+	return &CampaignWorker{
+		repo:           repo,
+		broker:         b,
+		cfg:            cfg,
+		identityClient: identityClient,
+	}
 }
 
 func (w *CampaignWorker) Start(ctx context.Context) {
@@ -75,8 +88,7 @@ func (w *CampaignWorker) dispatchPendingCampaigns(ctx context.Context) {
 
 	log.Info("dispatching campaign",
 		zap.String("campaign_id", campaign.Id.String()),
-		zap.Int("total_recipients", campaign.TotalRecipients),
-		zap.Int("resume_offset", campaign.LastDispatchedOffset),
+		zap.String("resume_cursor", campaign.LastDispatchedCursor),
 	)
 
 	w.dispatchCampaign(ctx, campaign)
@@ -86,85 +98,114 @@ func (w *CampaignWorker) dispatchCampaign(ctx context.Context, campaign *domain.
 	tracer := otel.Tracer("notification-service")
 	ctx, span := tracer.Start(ctx, "campaign.dispatch")
 	defer span.End()
-	span.SetAttributes(
-		attribute.String("campaign.id", campaign.Id.String()),
-		attribute.Int("campaign.total_recipients", campaign.TotalRecipients),
-	)
+	span.SetAttributes(attribute.String("campaign.id", campaign.Id.String()))
 
 	log := logger.L()
+
+	// Deserialize filter stored at campaign creation time.
+	var filter userFilter
+	if campaign.FilterCriteria != "" && campaign.FilterCriteria != "{}" {
+		if err := json.Unmarshal([]byte(campaign.FilterCriteria), &filter); err != nil {
+			log.Error("invalid filter_criteria JSON", zap.String("campaign_id", campaign.Id.String()), zap.Error(err))
+		}
+	}
+
+	// Set total_recipients once before starting, so the stats endpoint reports correctly.
+	total, err := w.identityClient.CountUsers(ctx, filter.Role)
+	if err != nil {
+		log.Error("failed to count users for campaign", zap.String("campaign_id", campaign.Id.String()), zap.Error(err))
+		_ = w.repo.MarkCampaignStatus(ctx, campaign.Id, domain.CampaignStatusFailed)
+		return
+	}
+	if err := w.repo.SetTotalRecipients(ctx, campaign.Id, total); err != nil {
+		log.Warn("failed to set total_recipients", zap.String("campaign_id", campaign.Id.String()), zap.Error(err))
+	}
+
 	batchSize := w.cfg.Worker.CampaignBatchSize
 	if batchSize <= 0 {
 		batchSize = 1000
 	}
-	offset := campaign.LastDispatchedOffset // resume from checkpoint after crash
+	cursor := campaign.LastDispatchedCursor
 
-	for {
-		if ctx.Err() != nil {
-			// Graceful shutdown: leave status as "dispatching" so the next pod can resume.
-			log.Info("context cancelled, pausing campaign dispatch",
-				zap.String("campaign_id", campaign.Id.String()),
-				zap.Int("offset", offset),
-			)
-			return
+	span.SetAttributes(attribute.Int64("campaign.total_recipients", total))
+	log.Info("campaign dispatch starting",
+		zap.String("campaign_id", campaign.Id.String()),
+		zap.Int64("total_recipients", total),
+		zap.String("resume_cursor", cursor),
+	)
+
+	var batch []*notifgrpc.UserRecord
+	var streamErr error
+	totalDispatched := 0
+
+	streamCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	streamErr = w.identityClient.StreamUsers(streamCtx, filter.Role, cursor, int32(batchSize), func(u *notifgrpc.UserRecord) error {
+		if streamCtx.Err() != nil {
+			return streamCtx.Err()
 		}
 
-		recipients, err := w.repo.GetRecipientsBatch(ctx, campaign.Id, offset, batchSize)
-		if err != nil {
-			log.Error("failed to fetch recipients batch",
-				zap.String("campaign_id", campaign.Id.String()),
-				zap.Error(err),
-			)
-			_ = w.repo.MarkCampaignStatus(ctx, campaign.Id, domain.CampaignStatusFailed)
-			return
+		batch = append(batch, u)
+		cursor = u.Id
+
+		if len(batch) < batchSize {
+			return nil
 		}
 
-		if len(recipients) == 0 {
-			_ = w.repo.MarkCampaignStatus(ctx, campaign.Id, domain.CampaignStatusCompleted)
-			log.Info("campaign dispatch completed",
-				zap.String("campaign_id", campaign.Id.String()),
-				zap.Int("total_dispatched", offset),
-			)
-			return
+		// Flush full batch.
+		if err := w.publishBatch(streamCtx, campaign, batch); err != nil {
+			return err
 		}
-
-		if err := w.publishBatch(ctx, campaign, recipients); err != nil {
-			log.Error("failed to publish batch, stopping dispatch",
-				zap.String("campaign_id", campaign.Id.String()),
-				zap.Int("offset", offset),
-				zap.Error(err),
-			)
-			_ = w.repo.MarkCampaignStatus(ctx, campaign.Id, domain.CampaignStatusFailed)
-			return
+		if err := w.repo.CheckpointDispatch(streamCtx, campaign.Id, cursor, len(batch)); err != nil {
+			log.Warn("failed to checkpoint dispatch", zap.String("campaign_id", campaign.Id.String()), zap.Error(err))
 		}
-
-		// CHECKPOINT: persist progress immediately after a successful publish.
-		// If the process crashes here, the batch has already reached the queue, so
-		// on resume those recipients will be dispatched again (at-least-once delivery).
-		if err := w.repo.CheckpointDispatch(ctx, campaign.Id, len(recipients)); err != nil {
-			log.Error("failed to checkpoint dispatch progress",
-				zap.String("campaign_id", campaign.Id.String()),
-				zap.Int("batch_size", len(recipients)),
-				zap.Error(err),
-			)
-			// Continue without stopping — worst case: small duplicate window on resume.
-		}
-
-		offset += len(recipients)
-
+		totalDispatched += len(batch)
 		log.Info("batch dispatched",
 			zap.String("campaign_id", campaign.Id.String()),
-			zap.Int("offset", offset),
-			zap.Int("total", campaign.TotalRecipients),
+			zap.String("cursor", cursor),
+			zap.Int("total_dispatched", totalDispatched),
 		)
+		batch = batch[:0]
+		return nil
+	})
+
+	// Flush remaining partial batch.
+	if streamErr == nil && len(batch) > 0 {
+		if err := w.publishBatch(ctx, campaign, batch); err != nil {
+			streamErr = err
+		} else {
+			if err := w.repo.CheckpointDispatch(ctx, campaign.Id, cursor, len(batch)); err != nil {
+				log.Warn("failed to checkpoint final batch", zap.String("campaign_id", campaign.Id.String()), zap.Error(err))
+			}
+			totalDispatched += len(batch)
+		}
 	}
+
+	if streamErr != nil {
+		if errors.Is(streamErr, context.Canceled) {
+			// Graceful shutdown: leave status as "dispatching" so the next pod can resume.
+			log.Info("context cancelled, pausing campaign dispatch", zap.String("campaign_id", campaign.Id.String()))
+			return
+		}
+		log.Error("campaign dispatch failed", zap.String("campaign_id", campaign.Id.String()), zap.Error(streamErr))
+		_ = w.repo.MarkCampaignStatus(ctx, campaign.Id, domain.CampaignStatusFailed)
+		return
+	}
+
+	_ = w.repo.MarkCampaignStatus(ctx, campaign.Id, domain.CampaignStatusCompleted)
+	log.Info("campaign dispatch completed",
+		zap.String("campaign_id", campaign.Id.String()),
+		zap.Int("total_dispatched", totalDispatched),
+	)
 }
 
-// publishBatch publishes all recipients in one batch with exponential backoff when the
+// publishBatch publishes all users in one batch with exponential backoff when the
 // queue is full (back-pressure layer 2 — publisher-side retry).
-func (w *CampaignWorker) publishBatch(ctx context.Context, campaign *domain.Campaign, recipients []*domain.CampaignRecipient) error {
+func (w *CampaignWorker) publishBatch(ctx context.Context, campaign *domain.Campaign, users []*notifgrpc.UserRecord) error {
 	const maxRetries = 5
 	for attempt := 0; attempt < maxRetries; attempt++ {
-		err := w.tryPublishBatch(ctx, campaign, recipients)
+		err := w.tryPublishBatch(ctx, campaign, users)
 		if err == nil {
 			return nil
 		}
@@ -185,13 +226,13 @@ func (w *CampaignWorker) publishBatch(ctx context.Context, campaign *domain.Camp
 	return fmt.Errorf("failed to publish batch after %d retries", maxRetries)
 }
 
-func (w *CampaignWorker) tryPublishBatch(ctx context.Context, campaign *domain.Campaign, recipients []*domain.CampaignRecipient) error {
-	for _, r := range recipients {
+func (w *CampaignWorker) tryPublishBatch(ctx context.Context, campaign *domain.Campaign, users []*notifgrpc.UserRecord) error {
+	for _, u := range users {
 		task := dto.CampaignTask{
 			CampaignID: campaign.Id.String(),
-			UserID:     r.UserID,
+			UserID:     u.Id,
 			EventType:  campaign.EventType,
-			Recipient:  r.Recipient,
+			Recipient:  u.Email,
 			Channel:    campaign.Channel,
 			Subject:    campaign.Subject,
 			Content:    campaign.Content,

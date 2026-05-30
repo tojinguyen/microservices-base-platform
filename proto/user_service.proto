@@ -1,0 +1,43 @@
+syntax = "proto3";
+
+package userpb;
+
+option go_package = "backend/pkg/userpb";
+
+// UserService streams users from the identity service so that downstream
+// services (e.g. notification campaign worker) can iterate over all users
+// without passing a large ID list over HTTP.
+service UserService {
+  // StreamUsers streams user records matching the filter, starting after
+  // the given cursor ID (for resumable dispatch).
+  rpc StreamUsers(StreamUsersRequest) returns (stream UserRecord);
+
+  // CountUsers returns the total number of users matching the filter.
+  rpc CountUsers(CountUsersRequest) returns (CountUsersResponse);
+}
+
+message StreamUsersRequest {
+  // Optional role filter ("" = all roles).
+  string role = 1;
+  // Cursor for resumable streaming — pass the last user ID seen to resume.
+  // Empty string means start from the beginning.
+  string cursor = 2;
+  // Server-side page size when fetching from DB (0 = default 500).
+  int32 batch_size = 3;
+}
+
+message UserRecord {
+  string id    = 1;
+  string email = 2;
+  string name  = 3;
+  string role  = 4;
+}
+
+message CountUsersRequest {
+  // Optional role filter ("" = all roles).
+  string role = 1;
+}
+
+message CountUsersResponse {
+  int64 count = 1;
+}
