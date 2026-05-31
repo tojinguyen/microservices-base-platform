@@ -16,6 +16,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+
 	"github.com/gin-gonic/gin"
 	_ "github.com/tojinguyen/notification/docs"
 	notificationConfig "github.com/tojinguyen/notification/internal/config"
@@ -88,6 +90,29 @@ func main() {
 		log.Error("Unknown app mode, falling back to API mode", zap.String("mode", cfg.AppMode))
 		return
 	}
+}
+
+// startMetricsServer exposes the Prometheus /metrics endpoint on a dedicated port for worker
+// pods that have no main HTTP server. Port 9090 is the conventional Prometheus scrape port.
+func startMetricsServer(ctx context.Context) {
+	log := logger.L()
+	mux := http.NewServeMux()
+	mux.Handle("/metrics", promhttp.Handler())
+	srv := &http.Server{Addr: ":9090", Handler: mux}
+
+	go func() {
+		log.Info("metrics server starting", zap.Int("port", 9090))
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Error("metrics server failed", zap.Error(err))
+		}
+	}()
+
+	go func() {
+		<-ctx.Done()
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = srv.Shutdown(shutdownCtx)
+	}()
 }
 
 func runAPI(ctx context.Context, cfg *notificationConfig.Config, database *gorm.DB) {
@@ -167,6 +192,8 @@ func runAPI(ctx context.Context, cfg *notificationConfig.Config, database *gorm.
 
 func runEmailWorker(ctx context.Context, cfg *notificationConfig.Config, database *gorm.DB) {
 	log := logger.L()
+	startMetricsServer(ctx)
+
 	brokerClient, err := broker.NewRabbitMQ(cfg.Broker)
 	if err != nil {
 		log.Panic("failed to connect to broker", zap.Error(err))
@@ -183,6 +210,8 @@ func runEmailWorker(ctx context.Context, cfg *notificationConfig.Config, databas
 
 func runCampaignWorker(ctx context.Context, cfg *notificationConfig.Config, database *gorm.DB) {
 	log := logger.L()
+	startMetricsServer(ctx)
+
 	brokerClient, err := broker.NewRabbitMQ(cfg.Broker)
 	if err != nil {
 		log.Panic("failed to connect to broker", zap.Error(err))
@@ -205,6 +234,7 @@ func runCampaignWorker(ctx context.Context, cfg *notificationConfig.Config, data
 
 func runSchedulerWorker(ctx context.Context, cfg *notificationConfig.Config, database *gorm.DB) {
 	log := logger.L()
+	startMetricsServer(ctx)
 
 	notificationRepo := repository.NewNotificationRepository(database)
 	templateRepo := repository.NewTemplateRepository(database)
@@ -220,6 +250,8 @@ func runSchedulerWorker(ctx context.Context, cfg *notificationConfig.Config, dat
 
 func runWebhookWorker(ctx context.Context, cfg *notificationConfig.Config, database *gorm.DB) {
 	log := logger.L()
+	startMetricsServer(ctx)
+
 	brokerClient, err := broker.NewRabbitMQ(cfg.Broker)
 	if err != nil {
 		log.Panic("failed to connect to broker", zap.Error(err))
@@ -238,6 +270,8 @@ func runWebhookWorker(ctx context.Context, cfg *notificationConfig.Config, datab
 
 func runOutboxWorker(ctx context.Context, cfg *notificationConfig.Config, database *gorm.DB) {
 	log := logger.L()
+	startMetricsServer(ctx)
+
 	brokerClient, err := broker.NewRabbitMQ(cfg.Broker)
 	if err != nil {
 		log.Panic("failed to connect to broker", zap.Error(err))
@@ -254,6 +288,8 @@ func runOutboxWorker(ctx context.Context, cfg *notificationConfig.Config, databa
 
 func runDLQWorker(ctx context.Context, cfg *notificationConfig.Config, database *gorm.DB) {
 	log := logger.L()
+	startMetricsServer(ctx)
+
 	brokerClient, err := broker.NewRabbitMQ(cfg.Broker)
 	if err != nil {
 		log.Panic("failed to connect to broker", zap.Error(err))

@@ -15,6 +15,7 @@ import (
 	"github.com/tojinguyen/notification/internal/config"
 	"github.com/tojinguyen/notification/internal/domain"
 	"github.com/tojinguyen/notification/internal/dto"
+	"github.com/tojinguyen/notification/internal/metrics"
 	"github.com/tojinguyen/notification/internal/repository"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -117,6 +118,7 @@ func (w *EmailWorker) HandleMessage(ctx context.Context, body []byte) error {
 	var task dto.NotificationTask
 	if err := json.Unmarshal(body, &task); err != nil {
 		log.Error("Failed to unmarshal notification task", zap.Error(err))
+		metrics.EmailsProcessedTotal.WithLabelValues("regular", "rejected").Inc()
 		return broker.ErrRejectToDLQ // Reject to DLQ immediately on malformed payload
 	}
 
@@ -130,10 +132,13 @@ func (w *EmailWorker) HandleMessage(ctx context.Context, body []byte) error {
 		zap.String("recipient", task.Recipient),
 	)
 
+	sendStart := time.Now()
 	err := w.sendEmail(ctx, task.NotificationID, task.Recipient, task.Data["subject"], task.Data["content"])
+	metrics.EmailSendDuration.WithLabelValues("regular").Observe(time.Since(sendStart).Seconds())
 
 	if errors.Is(err, ErrCircuitBreakerOpen) {
 		log.Warn("Circuit breaker is open, skipping email send", zap.String("notification_id", task.NotificationID))
+		metrics.EmailsProcessedTotal.WithLabelValues("regular", "circuit_open").Inc()
 		return err // Requeue to try again later
 	}
 
@@ -149,7 +154,6 @@ func (w *EmailWorker) HandleMessage(ctx context.Context, body []byte) error {
 			delay := retryDelay(task.RetryCount)
 			log.Info("Scheduling broker-level retry", zap.Duration("delay", delay), zap.Int("attempt", task.RetryCount))
 
-			// Route message to Retry Queue via Retry Exchange
 			retryExchange := w.cfg.Queue.Exchange + ".retry"
 			routingKey := string(domain.ChannelEmail) + ".retry"
 
@@ -157,10 +161,12 @@ func (w *EmailWorker) HandleMessage(ctx context.Context, body []byte) error {
 				log.Error("Failed to publish retry message", zap.Error(publishErr))
 				return err // Publish fails -> requeue immediately on main queue as fallback
 			}
+			metrics.EmailsProcessedTotal.WithLabelValues("regular", "retried").Inc()
 			return nil // Return nil to ACK current message on main queue
 		} else {
 			log.Error("Max retries reached, marking as failed", zap.String("notification_id", task.NotificationID))
 			w.repo.UpdateDeliveryStatus(ctx, notificationID, domain.NotificationStatusFailed, err.Error(), nil, &task.RetryCount)
+			metrics.EmailsProcessedTotal.WithLabelValues("regular", "failed").Inc()
 			return broker.ErrRejectToDLQ // Rejects message to DLQ natively via RabbitMQ
 		}
 	}
@@ -170,6 +176,7 @@ func (w *EmailWorker) HandleMessage(ctx context.Context, body []byte) error {
 		log.Error("Failed to update notification status to delivering", zap.Error(err))
 	}
 
+	metrics.EmailsProcessedTotal.WithLabelValues("regular", "success").Inc()
 	log.Info("Email sent successfully", zap.String("notification_id", task.NotificationID))
 	return nil
 }
@@ -194,11 +201,14 @@ func (w *EmailWorker) HandleCampaignMessage(ctx context.Context, body []byte) er
 	// Use "campaign:<campaignID>:<userID>" as the X-Notification-ID header so Mailpit
 	// webhooks can be linked back even without a pre-existing notifications row.
 	emailID := fmt.Sprintf("campaign:%s:%s", task.CampaignID, task.UserID)
+	sendStart := time.Now()
 	sendErr := w.sendEmail(ctx, emailID, task.Recipient, task.Subject, task.Content)
+	metrics.EmailSendDuration.WithLabelValues("campaign").Observe(time.Since(sendStart).Seconds())
 
 	if errors.Is(sendErr, ErrCircuitBreakerOpen) {
 		log.Warn("circuit breaker open, NACK campaign message",
 			zap.String("campaign_id", task.CampaignID))
+		metrics.EmailsProcessedTotal.WithLabelValues("campaign", "circuit_open").Inc()
 		return sendErr
 	}
 
@@ -213,6 +223,7 @@ func (w *EmailWorker) HandleCampaignMessage(ctx context.Context, body []byte) er
 		w.insertCampaignAudit(ctx, task, domain.NotificationStatusFailed, sendErr.Error())
 		w.insertCampaignRecipient(ctx, campaignID, task.UserID, task.Recipient, domain.CampaignRecipientStatusFailed)
 		_ = w.campaignRepo.IncrementCampaignCounter(ctx, campaignID, "failed_count")
+		metrics.EmailsProcessedTotal.WithLabelValues("campaign", "failed").Inc()
 		return sendErr
 	}
 
@@ -220,6 +231,7 @@ func (w *EmailWorker) HandleCampaignMessage(ctx context.Context, body []byte) er
 	w.insertCampaignAudit(ctx, task, domain.NotificationStatusSent, "")
 	w.insertCampaignRecipient(ctx, campaignID, task.UserID, task.Recipient, domain.CampaignRecipientStatusSent)
 	_ = w.campaignRepo.IncrementCampaignCounter(ctx, campaignID, "sent_count")
+	metrics.EmailsProcessedTotal.WithLabelValues("campaign", "success").Inc()
 
 	log.Info("campaign email sent",
 		zap.String("campaign_id", task.CampaignID),

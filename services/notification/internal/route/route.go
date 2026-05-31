@@ -7,10 +7,12 @@ import (
 	"backend/pkg/ratelimit"
 
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 	notificationConfig "github.com/tojinguyen/notification/internal/config"
 	"github.com/tojinguyen/notification/internal/handler"
+	"github.com/tojinguyen/notification/internal/middleware"
 )
 
 func RegisterRoutes(
@@ -23,6 +25,9 @@ func RegisterRoutes(
 	limiter *ratelimit.RateLimiter,
 	rlCfg notificationConfig.RateLimitConfig,
 ) {
+	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
+	r.Use(middleware.PrometheusMiddleware())
+
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	v1 := r.Group("/api/v1/notifications")

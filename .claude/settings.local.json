@@ -7,7 +7,10 @@
       "Bash(Get-ChildItem -Path \"d:\\\\BACKEND\\\\PROJECTS\\\\microservices-base-platform\\\\services\\\\notification\\\\\" -Recurse -Force | Select-Object FullName, PSIsContainer | ConvertTo-Json -Depth 10)",
       "Bash(Get-ChildItem -Path . -Depth 0)",
       "Bash(go mod *)",
-      "Bash(protoc --version)"
+      "Bash(protoc --version)",
+      "Bash(Select-Object FullName, PSIsContainer)",
+      "Bash(Format-Table -AutoSize)",
+      "Bash(xargs grep -l \"prometheus\\\\|metrics\")"
     ]
   }
 }

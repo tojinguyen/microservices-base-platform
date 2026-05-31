@@ -14,6 +14,7 @@ import (
 	"github.com/tojinguyen/notification/internal/domain"
 	"github.com/tojinguyen/notification/internal/dto"
 	notifgrpc "github.com/tojinguyen/notification/internal/grpc"
+	"github.com/tojinguyen/notification/internal/metrics"
 	"github.com/tojinguyen/notification/internal/repository"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -95,6 +96,11 @@ func (w *CampaignWorker) dispatchPendingCampaigns(ctx context.Context) {
 }
 
 func (w *CampaignWorker) dispatchCampaign(ctx context.Context, campaign *domain.Campaign) {
+	dispatchStart := time.Now()
+	defer func() {
+		metrics.CampaignDispatchDuration.Observe(time.Since(dispatchStart).Seconds())
+	}()
+
 	tracer := otel.Tracer("notification-service")
 	ctx, span := tracer.Start(ctx, "campaign.dispatch")
 	defer span.End()
@@ -154,13 +160,16 @@ func (w *CampaignWorker) dispatchCampaign(ctx context.Context, campaign *domain.
 		}
 
 		// Flush full batch.
+		batchLen := len(batch)
 		if err := w.publishBatch(streamCtx, campaign, batch); err != nil {
 			return err
 		}
-		if err := w.repo.CheckpointDispatch(streamCtx, campaign.Id, cursor, len(batch)); err != nil {
+		if err := w.repo.CheckpointDispatch(streamCtx, campaign.Id, cursor, batchLen); err != nil {
 			log.Warn("failed to checkpoint dispatch", zap.String("campaign_id", campaign.Id.String()), zap.Error(err))
 		}
-		totalDispatched += len(batch)
+		metrics.CampaignBatchesDispatched.Inc()
+		metrics.CampaignUsersDispatched.Add(float64(batchLen))
+		totalDispatched += batchLen
 		log.Info("batch dispatched",
 			zap.String("campaign_id", campaign.Id.String()),
 			zap.String("cursor", cursor),
@@ -172,13 +181,16 @@ func (w *CampaignWorker) dispatchCampaign(ctx context.Context, campaign *domain.
 
 	// Flush remaining partial batch.
 	if streamErr == nil && len(batch) > 0 {
+		finalLen := len(batch)
 		if err := w.publishBatch(ctx, campaign, batch); err != nil {
 			streamErr = err
 		} else {
-			if err := w.repo.CheckpointDispatch(ctx, campaign.Id, cursor, len(batch)); err != nil {
+			if err := w.repo.CheckpointDispatch(ctx, campaign.Id, cursor, finalLen); err != nil {
 				log.Warn("failed to checkpoint final batch", zap.String("campaign_id", campaign.Id.String()), zap.Error(err))
 			}
-			totalDispatched += len(batch)
+			metrics.CampaignBatchesDispatched.Inc()
+			metrics.CampaignUsersDispatched.Add(float64(finalLen))
+			totalDispatched += finalLen
 		}
 	}
 
@@ -210,6 +222,7 @@ func (w *CampaignWorker) publishBatch(ctx context.Context, campaign *domain.Camp
 			return nil
 		}
 		if errors.Is(err, broker.ErrQueueFull) {
+			metrics.CampaignBackoffs.Inc()
 			logger.L().Warn("campaign queue full, backing off",
 				zap.Int("attempt", attempt+1),
 				zap.String("campaign_id", campaign.Id.String()),
