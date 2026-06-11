@@ -31,6 +31,10 @@ grafana:
             path: /var/lib/grafana/dashboards/microservices
   dashboardsConfigMaps:
     microservices: "grafana-logs-dashboard"
+  sidecar:
+    datasources:
+      label: grafana_datasource
+      labelValue: "1"
 
 promtail:
   enabled: true

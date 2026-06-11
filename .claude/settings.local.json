@@ -10,7 +10,12 @@
       "Bash(protoc --version)",
       "Bash(Select-Object FullName, PSIsContainer)",
       "Bash(Format-Table -AutoSize)",
-      "Bash(xargs grep -l \"prometheus\\\\|metrics\")"
+      "Bash(xargs grep -l \"prometheus\\\\|metrics\")",
+      "PowerShell(kubectl exec -n monitoring loki-grafana-699685b49d-t4c2v -c grafana-sc-datasources -- ls /etc/grafana/provisioning/datasources/)",
+      "PowerShell(kubectl exec -n monitoring loki-grafana-699685b49d-t4c2v -c grafana-sc-datasources -- cat /etc/grafana/provisioning/datasources/loki.yaml)",
+      "Bash(python3 -c \"import sys,json; [print\\(f'{e[\\\\\"name\\\\\"]}={e.get\\(\\\\\"value\\\\\",\\\\\"\\(ref\\)\\\\\"\\)}'\\) for e in json.load\\(sys.stdin\\)]\")",
+      "PowerShell(kubectl get pod loki-grafana-699685b49d-t4c2v -n monitoring -o jsonpath='{.spec.containers[?\\(@.name==\"grafana-sc-datasources\"\\)].env}' | ConvertFrom-Json | ForEach-Object { \"$\\($_.name\\)=$\\($_.value\\)\" })",
+      "PowerShell(kubectl get pod loki-grafana-699685b49d-t4c2v -n monitoring -o json | ConvertFrom-Json | Select-Object -ExpandProperty spec | Select-Object -ExpandProperty initContainers, containers | Where-Object { $_.name -eq \"grafana-sc-datasources\" } | Select-Object -ExpandProperty env | Format-Table name, value -AutoSize)"
     ]
   }
 }
