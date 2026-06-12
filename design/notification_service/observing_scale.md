@@ -1,154 +1,255 @@
-# Observing Scale — Notification Service
+# Observing & Scaling — Notification Service
 
-Tài liệu này tổng hợp kiến thức và kỹ năng quan sát khả năng scale của hệ thống notification, dựa trên kiến trúc thực tế của project.
+Hướng dẫn thực hành: cách đọc metric để biết hệ thống đang đứng ở đâu, khi nào cần scale, và scale như thế nào.
 
 ---
 
-## Tổng quan kiến trúc liên quan đến scale
+## Kiến trúc và điểm bottleneck
 
 ```
 Campaign API ──► campaign_worker (1 pod, FOR UPDATE SKIP LOCKED)
                       │
-                      ▼ gRPC stream (1000 users/batch)
+                      ▼ gRPC stream (batch_size users/lần)
               identity-service:50051
                       │
-                      ▼ publish
-              RabbitMQ [campaign.email queue, max 50000]
+                      ▼ publish → campaign.email queue (max 50 000 msg)
+              RabbitMQ [notification.direct exchange]
                       │
-                      ▼ consume
-          worker-email (N pods) ──► SMTP (Mailpit)
+                      ├──► worker-email (N pods) ──► SMTP
+                      └──► worker-webhook (N pods) ──► HTTP endpoint
 ```
 
-Điểm bottleneck tiềm năng:
-- `worker-email`: số pod quyết định throughput email/giây
-- RabbitMQ queue depth: phản ánh chênh lệch tốc độ publisher vs consumer
-- gRPC stream từ identity: tốc độ đọc user list
+**Bottleneck theo thứ tự thường gặp:**
+
+| # | Bottleneck | Signal |
+|---|-----------|--------|
+| 1 | `worker-email` quá ít pod | Queue depth tăng, backoff tăng |
+| 2 | SMTP server chậm / từ chối | `email_send_duration_seconds` tăng, circuit breaker mở |
+| 3 | `campaign_worker` gRPC stream chậm | `campaign_users_dispatched_total` rate thấp |
+| 4 | RabbitMQ broker quá tải | Consumer count = 0 hoặc delivery rate = 0 |
 
 ---
 
-## 1. RabbitMQ Management UI
+## Layer 1 — Prometheus + Grafana (số liệu chính xác nhất)
 
-**Địa chỉ:** `http://localhost:15672` (local) | `http://rabbitmq.localhost` (k8s nếu có ingress)  
-**Đây là nơi quan sát scale trực tiếp và nhanh nhất.**
+**URL:** `http://localhost/grafana` (local) | `http://localhost:3000` (k8s port-forward)  
+**Datasource:** Prometheus (đã configure trong `grafana-prometheus-datasource.yaml`)
 
-### Các metric cần nhìn khi campaign chạy
+Notification service expose `/metrics` ở port 8082.
 
-| Tab | Metric | Ý nghĩa |
-|-----|--------|---------|
-| Queues → `campaign.email` | **Messages ready** | Số message đang chờ chưa được xử lý. Tăng không ngừng = worker không đủ |
-| Queues → `campaign.email` | **Publish rate (msg/s)** | Tốc độ campaign_worker đẩy vào queue |
-| Queues → `campaign.email` | **Deliver rate (msg/s)** | Tốc độ worker-email xử lý. So sánh với publish rate |
-| Queues → `campaign.email` | **Consumer count** | Số worker đang active. Scale lên → số này tăng |
-| Overview | **Memory / Disk** | RabbitMQ broker health |
+### 1.1 Throughput email — phát hiện bottleneck chính
 
-### Đọc kết quả
+```promql
+# Tốc độ email gửi thành công (email/giây, phân theo loại)
+sum(rate(notification_emails_processed_total{status="success"}[2m])) by (type)
+```
+- `type=campaign` — campaign emails được xử lý bởi `HandleCampaignMessage`
+- `type=regular` — notification thường qua `HandleMessage`
 
+```promql
+# So sánh success vs failed — phát hiện lỗi SMTP
+sum(rate(notification_emails_processed_total[2m])) by (type, status)
+```
+
+**Đọc kết quả:**
+- `status=failed` tăng đột ngột → SMTP server có vấn đề
+- `status=circuit_open` xuất hiện → circuit breaker đang mở (SMTP unreachable)
+- `status=retried` cao → email thất bại nhiều lần, xem lại SMTP config
+
+### 1.2 Latency SMTP — phát hiện SMTP chậm
+
+```promql
+# p50 latency gửi email (median)
+histogram_quantile(0.50, rate(notification_email_send_duration_seconds_bucket[5m]))
+
+# p99 latency — worst case
+histogram_quantile(0.99, rate(notification_email_send_duration_seconds_bucket[5m]))
+
+# Phân theo loại (regular vs campaign)
+histogram_quantile(0.99, rate(notification_email_send_duration_seconds_bucket[5m])) by (type)
+```
+
+**Ngưỡng tham chiếu:**
+- p99 < 2s → bình thường (Mailpit local)
+- p99 2–5s → SMTP chậm, xem xét tăng timeout
+- p99 > 5s → circuit breaker sẽ mở, cần điều tra SMTP
+
+### 1.3 Campaign dispatch rate — đo tốc độ publish
+
+```promql
+# Số user/giây đang được dispatch vào queue
+rate(notification_campaign_users_dispatched_total[2m])
+
+# Số batch/phút
+rate(notification_campaign_batches_dispatched_total[2m]) * 60
+```
+
+Với `WORKER_CAMPAIGN_BATCH_SIZE=1000`:
+- 1 batch/phút = 1000 user/phút → campaign 50 000 user mất ~50 phút
+- 6 batch/phút = 6000 user/phút → campaign 50 000 user mất ~8 phút
+
+### 1.4 Back-pressure — queue có đang đầy không?
+
+```promql
+# Số lần campaign_worker bị block vì queue đầy (mỗi backoff = 5s delay)
+rate(notification_campaign_backoffs_total[5m])
+```
+
+- Rate = 0 → queue không đầy, worker-email đủ capacity
+- Rate > 0 → queue đang đầy (≥50 000 messages), **cần scale thêm worker-email**
+- Rate tăng dần → worker-email đang càng ngày càng chậm hơn dispatch rate
+
+### 1.5 Campaign dispatch duration — đo tổng thời gian một campaign
+
+```promql
+# Median thời gian hoàn thành một campaign (từ start đến fully dispatched)
+histogram_quantile(0.50, rate(notification_campaign_dispatch_duration_seconds_bucket[30m]))
+
+# p95
+histogram_quantile(0.95, rate(notification_campaign_dispatch_duration_seconds_bucket[30m]))
+```
+
+### 1.6 HTTP API — kiểm tra API endpoint
+
+```promql
+# Request rate của notification API
+sum(rate(notification_http_requests_total[2m])) by (method, path, status)
+
+# Tỉ lệ lỗi (4xx, 5xx)
+sum(rate(notification_http_requests_total{status=~"[45].."}[2m]))
+  /
+sum(rate(notification_http_requests_total[2m]))
+
+# p99 latency API
+histogram_quantile(0.99, rate(notification_http_request_duration_seconds_bucket[5m])) by (path)
+
+# Request đang xử lý (in-flight)
+notification_http_requests_in_flight
+```
+
+---
+
+## Layer 2 — RabbitMQ Management UI (real-time queue depth)
+
+**URL:** `http://rabbitmq.localhost` (k8s) | `http://localhost:15672` (local)  
+**Login:** `guest` / `guest`
+
+### Queue cần theo dõi
+
+Vào tab **Queues** và nhìn vào `campaign.email`:
+
+| Metric | Ý nghĩa | Action |
+|--------|---------|--------|
+| **Messages ready** | Đang chờ chưa được xử lý | >10 000 → scale worker-email |
+| **Publish rate (msg/s)** | Tốc độ campaign_worker đẩy vào | Baseline để so sánh |
+| **Deliver rate (msg/s)** | Tốc độ worker-email xử lý | Phải gần bằng publish rate |
+| **Consumer count** | Số connection đang consume | 0 = worker-email đã chết |
+| **Unacked** | Message đang được xử lý chưa ACK | Tăng cao = worker bị treo |
+
+**Đọc kết quả:**
 ```
 Publish rate > Deliver rate  →  worker-email là bottleneck → scale thêm replica
-Publish rate ≈ Deliver rate  →  hệ thống cân bằng
-Messages ready → 50000       →  queue đầy, dispatcher bắt đầu backoff (thiết kế đúng)
-Consumer count tăng 3x       →  Deliver rate nên tăng ~3x nếu scale hiệu quả
+Deliver rate > Publish rate  →  queue đang drain → đủ capacity
+Messages ready = 50 000      →  queue đầy, campaign_worker đang backoff
+Consumer count tăng 3x       →  Deliver rate nên tăng ~3x (lý thuyết)
+Unacked tăng không ngừng     →  worker bị stuck, xem logs
 ```
+
+### Queue khác cần biết
+
+- **`email`** — regular notifications (có DLQ via `x-dead-letter-exchange`)
+- **`email.retry`** — messages đang chờ retry (TTL 1–15 phút tùy attempt)
+- **`email.dlq`** — dead-letter queue, message đã fail hết số lần retry
 
 ---
 
-## 2. Loki + Grafana (Structured Logs)
+## Layer 3 — Loki Logs (drill down khi có vấn đề)
 
-**Cài đặt:** `make loki-install && make dashboard-apply`  
-**Grafana:** `http://localhost:3000`
+**Grafana → Explore → Datasource: Loki**
 
-### LogQL queries hữu ích
+### LogQL queries quan trọng
 
-**Theo dõi tiến độ campaign dispatch:**
+**Theo dõi tiến độ dispatch:**
 ```logql
 {service="notification-service"} |= "batch dispatched"
 ```
-Mỗi dòng log này = 1 batch (mặc định 1000 user) đã được publish vào RabbitMQ. Đếm số dòng/phút để tính throughput.
+Mỗi dòng = 1 batch đã publish thành công. Đếm rate để so với số user cần gửi.
 
-**Phát hiện lỗi trong campaign:**
+**Phát hiện backoff (queue đầy):**
 ```logql
-{service="notification-service"} |= "campaign" | json | level="error"
+{service="notification-service"} |= "campaign queue full, backing off"
+```
+Xuất hiện log này → queue đã đạt 50 000 message, cần scale worker-email.
+
+**Theo dõi circuit breaker:**
+```logql
+{service="notification-service"} |= "circuit breaker"
 ```
 
-**Theo dõi backoff khi queue đầy:**
+**Phát hiện lỗi gửi email:**
 ```logql
-{service="notification-service"} |= "campaign queue full"
-```
-Xuất hiện log này = queue đã đạt giới hạn 50000, back-pressure đang hoạt động đúng.
-
-**Theo dõi worker-email gửi thành công:**
-```logql
-{service="notification-service"} |= "email sent"
+{service="notification-service"} | json | level="error" |= "email"
 ```
 
-### Dashboard có sẵn
-
-File [grafana-logs-dashboard.yaml](../../k8s/monitoring/grafana-logs-dashboard.yaml) deploy dashboard `Microservices Logs` với filter theo:
-- `service`: chọn `notification-service`
-- `level`: filter `error` / `warn` / `info`
-- `trace_id`: drill down theo request cụ thể
+**Tổng hợp error rate (Loki metric query):**
+```logql
+# Dùng trong Grafana panel khi Prometheus chưa có hoặc cần cross-check
+rate({service="notification-service"} | json | level="error" [1m])
+```
 
 ---
 
-## 3. Jaeger — Distributed Tracing
-
-**OTEL đã được instrument:** `OTEL_ENABLED=true`, exporter → `jaeger-service:4318`
-
-### Span đã có trong campaign
+## Decision Framework — Khi nào scale?
 
 ```
-campaign.dispatch (root span)
-  │  attributes: campaign.id, campaign.total_recipients
-  └─► gRPC StreamUsers
-  └─► publishBatch (mỗi batch)
-  └─► CheckpointDispatch
+Câu hỏi 1: campaign.email "Messages ready" có tăng không?
+│
+├── KHÔNG tăng (queue flat hoặc giảm)
+│     → Hệ thống đủ capacity. Không cần scale.
+│
+└── CÓ tăng liên tục
+      │
+      ├── Câu hỏi 2: notification_campaign_backoffs_total rate > 0?
+      │     │
+      │     ├── CÓ → queue đầy, dispatch đang bị block
+      │     │         → Scale worker-email trước (xem Section 4)
+      │     │
+      │     └── KHÔNG → queue chưa đầy nhưng vẫn tăng
+      │                   → Đây là normal lag, chờ thêm 2-3 phút
+      │
+      ├── Câu hỏi 3: email_send_duration_seconds p99 > 5s?
+      │     → SMTP chậm, không phải thiếu worker
+      │       → Xem circuit breaker logs, kiểm tra SMTP server
+      │
+      └── Câu hỏi 4: Consumer count = 0 trên queue?
+            → Worker-email đã crash
+              → kubectl logs + kubectl rollout restart
 ```
-
-### Cách dùng
-
-1. Mở Jaeger UI (nếu deploy): `http://jaeger.localhost`
-2. Service: `notification-service`
-3. Operation: `campaign.dispatch`
-4. So sánh latency giữa các lần chạy với số user khác nhau
-
-### Metric cần đo
-
-| Measurement | Cách đo |
-|-------------|---------|
-| Thời gian dispatch toàn bộ campaign | Duration của span `campaign.dispatch` |
-| Thời gian mỗi batch gRPC | Child span của StreamUsers |
-| Số lần retry publish | Tìm log "backing off" trong span |
 
 ---
 
-## 4. Scale thực tế — Kubectl Commands
-
-### Xem trạng thái hiện tại
-
-```bash
-kubectl get pods -n microservices-platform | grep notification
-```
-
-Output mẫu:
-```
-notification-api-xxx              1/1   Running
-notification-worker-email-xxx     1/1   Running   ← bottleneck
-notification-worker-campaign-xxx  1/1   Running
-notification-worker-outbox-xxx    2/2   Running
-```
+## Scale Commands
 
 ### Scale worker-email (bottleneck chính)
 
 ```bash
+# Xem trạng thái hiện tại
+kubectl get pods -n microservices-platform | grep notification
+
 # Scale lên 3 replica
 kubectl scale deployment notification-worker-email \
   --replicas=3 -n microservices-platform
 
-# Theo dõi pod khởi động
+# Theo dõi pod mới khởi động
 kubectl get pods -n microservices-platform -w | grep worker-email
 ```
 
-**Kỳ vọng sau scale:** RabbitMQ Deliver rate tăng ~3x, Messages ready giảm dần.
+**Kỳ vọng sau scale:** RabbitMQ Deliver rate tăng gần 3x, Messages ready giảm dần, `notification_emails_processed_total` rate tăng tương ứng.
+
+**Giới hạn của horizontal scale worker-email:**
+- Mỗi pod consume với `prefetch=20` (config `WORKER_CAMPAIGN_PREFETCH`)
+- 3 pods → 60 messages xử lý song song tối đa
+- Nếu SMTP có rate limit, tăng pod không giúp được — phải xem lại SMTP config
 
 ### Scale campaign worker (khi có nhiều campaign song song)
 
@@ -157,7 +258,7 @@ kubectl scale deployment notification-worker-campaign \
   --replicas=3 -n microservices-platform
 ```
 
-`FOR UPDATE SKIP LOCKED` đảm bảo 3 pod không claim cùng 1 campaign. Hiệu quả khi có ≥3 campaign đang `pending`.
+`FOR UPDATE SKIP LOCKED` đảm bảo 3 pod không claim cùng 1 campaign. Hiệu quả chỉ khi có ≥3 campaign đang `pending` cùng lúc.
 
 ### Xem resource usage
 
@@ -165,16 +266,15 @@ kubectl scale deployment notification-worker-campaign \
 kubectl top pods -n microservices-platform
 ```
 
-Nếu worker-email CPU/Memory gần limit → tăng resources trong [09_notification.yaml](../../k8s/services/notification/09_notification.yaml) hoặc scale thêm pod.
+Nếu worker-email CPU/Memory gần limit → tăng resource requests trong `k8s/services/notification/09_notification.yaml` thay vì chỉ tăng replica.
 
 ---
 
-## 5. Cursor Checkpoint — Quan sát Resume sau Crash
-
-Khi campaign đang chạy mà pod bị kill, kiểm tra checkpoint:
+## Theo dõi campaign đang chạy (API endpoint)
 
 ```bash
 # Lấy campaign_id từ response của POST /api/v1/campaigns
+# Sau đó:
 curl http://localhost:8082/api/v1/campaigns/{campaign_id}/stats
 ```
 
@@ -182,63 +282,53 @@ Response:
 ```json
 {
   "dispatched_count": 15000,
+  "sent_count": 14850,
+  "failed_count": 150,
   "last_dispatched_cursor": "user-uuid-xxx",
   "total_recipients": 50000,
   "progress_pct": 30.0
 }
 ```
 
-- `dispatched_count` tăng đều = dispatch đang chạy tốt
-- `last_dispatched_cursor` thay đổi sau mỗi batch = checkpoint hoạt động
-- Sau khi pod crash và restart, `dispatched_count` tiếp tục từ giá trị cũ, không reset về 0
+| Field | Ý nghĩa |
+|-------|---------|
+| `dispatched_count` | Số user đã publish vào RabbitMQ |
+| `sent_count` | Số email đã gửi thành công (worker xác nhận) |
+| `failed_count` | Số email thất bại |
+| `last_dispatched_cursor` | UUID user cuối cùng → resume point sau crash |
+| `progress_pct` | `dispatched_count / total_recipients * 100` |
+
+`sent_count` thường lag sau `dispatched_count` vì worker-email xử lý async.
 
 ---
 
-## 6. Back-pressure — Xác nhận 3 lớp hoạt động
-
-### Lớp 1: RabbitMQ queue cap
-Kiểm tra qua Management UI — khi `Messages ready = 50000`, queue từ chối publish mới (`x-overflow: reject-publish`).
-
-### Lớp 2: Publisher exponential backoff
-Log xuất hiện trong Loki:
-```
-"campaign queue full, backing off" attempt=1
-"campaign queue full, backing off" attempt=2
-...
-```
-Interval tăng dần: 5s → 10s → 15s → 20s → 25s (tối đa 5 lần).
-
-### Lớp 3: Batch size giới hạn memory
-Config `WORKER_CAMPAIGN_BATCH_SIZE=1000` (default). Worker không load toàn bộ user vào memory — chỉ giữ tối đa 1000 UserRecord tại một thời điểm.
-
-Kiểm tra: `kubectl top pods` — memory của campaign worker phải flat dù số user tăng.
-
----
-
-## 7. Gap hiện tại — Chưa có Prometheus Metrics
-
-Notification service **không expose `/metrics`** (khác với identity-service đã có). Do đó không thể:
-- Vẽ graph email/giây theo thời gian trong Grafana
-- Alert khi error rate vượt ngưỡng
-- Tính p99 latency của từng worker
-
-**Workaround hiện tại:** Dùng Loki log-based metrics (rate của log lines) thay cho Prometheus counter.
-
-```logql
-# Email sent rate per minute
-rate({service="notification-service"} |= "email sent" [1m])
-```
-
----
-
-## Checklist quan sát khi test campaign
+## Checklist thực hành khi chạy campaign test
 
 ```
-[ ] RabbitMQ UI mở sẵn, nhìn vào queue campaign.email
-[ ] Loki filter: {service="notification-service"} |= "batch dispatched"
-[ ] kubectl top pods đang chạy ở terminal khác
+[ ] Mở RabbitMQ UI (rabbitmq.localhost) → tab Queues → campaign.email
+[ ] Mở Grafana → Explore → Loki → filter: {service="notification-service"}
+[ ] Mở terminal: kubectl top pods -n microservices-platform -w
+
 [ ] POST /api/v1/campaigns → lưu campaign_id
-[ ] Sau 30s: GET /api/v1/campaigns/{id}/stats → kiểm tra dispatched_count tăng
-[ ] Scale worker-email lên 3 → so sánh Deliver rate trước/sau
+[ ] Sau 30s: kiểm tra campaign.email "Messages ready" có tăng không
+[ ] Sau 60s: GET /api/v1/campaigns/{id}/stats → dispatched_count có tăng không
+
+[ ] Grafana/Prometheus: rate(notification_campaign_users_dispatched_total[2m])
+[ ] Grafana/Prometheus: rate(notification_emails_processed_total{status="success"}[2m])
+
+[ ] Nếu backoff log xuất hiện → scale worker-email lên 3
+[ ] So sánh Deliver rate trước và sau scale
+[ ] So sánh rate(notification_emails_processed_total[2m]) trước và sau scale
+
 [ ] Kill campaign pod → xác nhận stats resume từ last_dispatched_cursor
 ```
+
+---
+
+## Tổng kết — 3 số quan trọng nhất
+
+Khi cần đánh giá nhanh hệ thống trong 60 giây, nhìn 3 số này:
+
+1. **RabbitMQ `campaign.email` Messages ready** — tăng liên tục = có vấn đề
+2. **`rate(notification_emails_processed_total{status="success"}[2m])`** — throughput thực của hệ thống
+3. **`rate(notification_campaign_backoffs_total[2m])`** — queue có đầy không, cần scale ngay không

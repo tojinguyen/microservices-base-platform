@@ -21,8 +21,8 @@
 > ```
 
 - **CloudBeaver** (PostgreSQL): [http://cloudbeaver.localhost](http://cloudbeaver.localhost) — web DBeaver
-  - Account: `admin`
-  - Password: `password123`
+  - Account: `cbadmin`
+  - Password: `Toai20102002`
 
   | | Identity DB | Notification DB |
   |---|---|---|
