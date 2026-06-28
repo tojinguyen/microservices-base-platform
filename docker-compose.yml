@@ -13,7 +13,24 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U user_admin -d identity_db"]
+      test: [ "CMD-SHELL", "pg_isready -U user_admin -d identity_db" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  postgres-notification:
+    image: postgres:15-alpine
+    container_name: notification-postgres
+    environment:
+      POSTGRES_USER: user_admin
+      POSTGRES_PASSWORD: password123
+      POSTGRES_DB: notification_db
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_notification_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U user_admin -d notification_db" ]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -24,7 +41,7 @@ services:
     ports:
       - "6379:6379"
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: [ "CMD", "redis-cli", "ping" ]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -38,15 +55,46 @@ services:
       redis-cache:
         condition: service_healthy
 
-  # 2. Identity Service
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: platform-rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: [ "CMD", "rabbitmq-diagnostics", "-q", "ping" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: platform-mailpit
+    environment:
+      - MP_WEBHOOK_URL=http://notification-service:8082/api/v1/notifications/webhooks/mailpit
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.57
+    container_name: platform-jaeger
+    ports:
+      - "16686:16686"   # Jaeger UI — http://localhost:16686
+      - "4317:4317"     # OTLP gRPC
+      - "4318:4318"     # OTLP HTTP
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+
   identity-service:
     image: identity-service
     build:
-      context: .                         
+      context: .
       dockerfile: services/identity/Dockerfile
     container_name: identity-service
     ports:
-      - "8080:8080" 
+      - "8080:8080"
+      - "50051:50051"
     depends_on:
       postgres-db:
         condition: service_healthy
@@ -58,6 +106,226 @@ services:
       # Overriding localhost from .env to use the internal docker network host
       - DATABASE_HOST=postgres-db
       - REDIS_HOST=redis-cache
+      - GRPC_PORT=50051
+
+  notification-service:
+    image: notification-service
+    build:
+      context: .
+      dockerfile: services/notification/Dockerfile
+    container_name: notification-service
+    ports:
+      - "8082:8082"
+    depends_on:
+      postgres-notification:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+      jaeger:
+        condition: service_started
+    env_file:
+      - services/notification/.env
+    environment:
+      - APP_MODE=api
+      - OTEL_ENABLED=true
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
+
+
+  notification-worker-email:
+    image: notification-service
+    container_name: notification-worker-email
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+      postgres-notification:
+        condition: service_healthy
+      jaeger:
+        condition: service_started
+    env_file:
+      - services/notification/.env
+    environment:
+      - APP_MODE=worker-email
+      - OTEL_ENABLED=true
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
+
+  notification-worker-webhook:
+    image: notification-service
+    container_name: notification-worker-webhook
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+      postgres-notification:
+        condition: service_healthy
+      jaeger:
+        condition: service_started
+    env_file:
+      - services/notification/.env
+    environment:
+      - APP_MODE=worker-webhook
+      - OTEL_ENABLED=true
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
+
+  notification-worker-campaign:
+    image: notification-service
+    container_name: notification-worker-campaign
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      postgres-notification:
+        condition: service_healthy
+      identity-service:
+        condition: service_started
+    env_file:
+      - services/notification/.env
+    environment:
+      - APP_MODE=worker-campaign
+      - IDENTITY_GRPC_ADDR=identity-service:50051
+      - OTEL_ENABLED=true
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
+
+  postgres-upload:
+    image: postgres:15-alpine
+    container_name: upload-postgres
+    environment:
+      POSTGRES_USER: user_admin
+      POSTGRES_PASSWORD: password123
+      POSTGRES_DB: upload_db
+    ports:
+      - "5434:5432"
+    volumes:
+      - postgres_upload_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U user_admin -d upload_db" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  minio:
+    image: minio/minio
+    container_name: platform-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: [ "CMD", "mc", "ready", "local" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  minio-init:
+    image: minio/mc
+    container_name: platform-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 minioadmin minioadmin &&
+      mc mb --ignore-existing local/videos &&
+      echo 'MinIO bucket ready'
+      "
+
+  upload-service:
+    image: upload-service
+    build:
+      context: .
+      dockerfile: services/upload/Dockerfile
+    container_name: upload-service
+    ports:
+      - "8083:8083"
+    depends_on:
+      postgres-upload:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    env_file:
+      - services/upload/.env
+    environment:
+      - APP_MODE=api
+      - DATABASE_HOST=postgres-upload
+      - REDIS_HOST=redis-cache
+      - BROKER_HOST=rabbitmq
+      - STORAGE_ENDPOINT=http://minio:9000
+      - STORAGE_PUBLIC_URL=http://localhost:9000/videos
+
+  upload-worker-janitor:
+    image: upload-service
+    container_name: upload-worker-janitor
+    depends_on:
+      postgres-upload:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    env_file:
+      - services/upload/.env
+    environment:
+      - APP_MODE=worker-janitor
+      - DATABASE_HOST=postgres-upload
+      - REDIS_HOST=redis-cache
+      - BROKER_HOST=rabbitmq
+      - STORAGE_ENDPOINT=http://minio:9000
+      - STORAGE_PUBLIC_URL=http://localhost:9000/videos
+
+  postgres-transcoder:
+    image: postgres:15-alpine
+    container_name: transcoder-postgres
+    environment:
+      POSTGRES_USER: user_admin
+      POSTGRES_PASSWORD: password123
+      POSTGRES_DB: transcoder_db
+    ports:
+      - "5435:5432"
+    volumes:
+      - postgres_transcoder_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U user_admin -d transcoder_db" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  transcoder-worker:
+    image: transcoder-service
+    build:
+      context: .
+      dockerfile: services/transcoder/Dockerfile
+    container_name: transcoder-worker
+    depends_on:
+      postgres-transcoder:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    env_file:
+      - services/transcoder/.env
+    environment:
+      - APP_MODE=worker
+      - DATABASE_HOST=postgres-transcoder
+      - BROKER_HOST=rabbitmq
+      - STORAGE_ENDPOINT=http://minio:9000
+    volumes:
+      - transcoder_tmp:/tmp/transcoder
 
 volumes:
   postgres_data:
+  postgres_notification_data:
+  postgres_upload_data:
+  postgres_transcoder_data:
+  transcoder_tmp:
+  minio_data:

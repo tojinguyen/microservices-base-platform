@@ -29,14 +29,15 @@ func MiddleWare(next http.Handler) http.Handler {
 
 		next.ServeHTTP(rw, r.WithContext(ctx))
 
-		duration := time.Since(start)
+		latency := time.Since(start)
+		latencyMS := float64(latency.Microseconds()) / 1000.0
 
+		// Xóa field trace_id thủ công và đổi duration thành latency_ms
 		FromContext(ctx).Info("http_request",
 			zap.String("method", r.Method),
 			zap.String("path", r.URL.Path),
 			zap.Int("status", rw.statusCode),
-			zap.Duration("duration", time.Duration(duration.Milliseconds())),
-			zap.String("trace_id", traceID),
+			zap.Float64("latency_ms", latencyMS),
 		)
 	})
 }

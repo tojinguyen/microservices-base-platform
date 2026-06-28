@@ -1,13 +1,15 @@
 package db
 
 import (
+	"backend/pkg/logger"
+
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
 )
 
 func openPostgres(dsn string) (*gorm.DB, error) {
 	return gorm.Open(postgres.Open(dsn), &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Info),
+		Logger: NewZapGormLogger(logger.L()),
 	})
 }
+

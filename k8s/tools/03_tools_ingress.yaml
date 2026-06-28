@@ -1,0 +1,83 @@
+---
+# Ingress riêng cho GUI tools — dùng host-based routing (không cần rewrite path)
+# Truy cập:
+#   http://cloudbeaver.localhost  → CloudBeaver (PostgreSQL GUI - web DBeaver)
+#   http://redisinsight.localhost → RedisInsight (Redis GUI)
+#   http://jaeger.localhost       → Jaeger Tracing UI (Distributed Tracing)
+#   http://rabbitmq.localhost     → RabbitMQ Management UI
+#   http://mailpit.localhost      → Mailpit (Mail Server GUI)
+#
+# Yêu cầu: thêm vào hosts file (một lần duy nhất):
+#   Windows: C:\Windows\System32\drivers\etc\hosts
+#   Linux/Mac: /etc/hosts
+#     127.0.0.1 cloudbeaver.localhost
+#     127.0.0.1 redisinsight.localhost
+#     127.0.0.1 jaeger.localhost
+#     127.0.0.1 rabbitmq.localhost
+#     127.0.0.1 mailpit.localhost
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: tools-ingress
+  namespace: microservices-platform
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "30"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: cloudbeaver.localhost
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: cloudbeaver-service
+                port:
+                  number: 8978
+
+    - host: redisinsight.localhost
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: redisinsight-service
+                port:
+                  number: 5540
+
+    - host: jaeger.localhost
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: jaeger-service
+                port:
+                  number: 16686
+
+    - host: rabbitmq.localhost
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: rabbitmq-service
+                port:
+                  number: 15672
+
+    - host: mailpit.localhost
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: mailpit-service
+                port:
+                  number: 8025

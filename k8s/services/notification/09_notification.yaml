@@ -1,0 +1,377 @@
+---
+# 1. ConfigMap: Cấu hình chung cho tất cả Notification components
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: notification-config
+  namespace: microservices-platform
+data:
+  PORT: "8082"
+  TIME_GRACE: "10"
+  DATABASE_HOST: "postgres-notification-service"
+  DATABASE_PORT: "5432"
+  DATABASE_USER: "user_admin"
+  DATABASE_DBNAME: "notification_db"
+  DATABASE_SSLMODE: "disable"
+  BROKER_HOST: "rabbitmq-service"
+  BROKER_PORT: "5672"
+  BROKER_USER: "guest"
+  QUEUE_EXCHANGE: "notification.direct"
+  QUEUE_WEBHOOK_MAILPIT: "webhook_mailpit"
+  SMTP_HOST: "mailpit-service"
+  SMTP_PORT: "1025"
+  SMTP_FROM: "no-reply@microservices.local"
+  SMTP_USERNAME: ""
+  WORKER_BATCH_SIZE: "10"
+  WORKER_INTERVAL: "5"
+  REDIS_HOST: "redis-notification-service"
+  REDIS_PORT: "6379"
+  REDIS_DB: "0"
+  RATE_LIMIT_GLOBAL_LIMIT: "100"
+  RATE_LIMIT_GLOBAL_WINDOW_SECS: "60"
+  RATE_LIMIT_SEND_LIMIT: "10"
+  RATE_LIMIT_SEND_WINDOW_SECS: "60"
+  IDENTITY_GRPC_ADDR: "identity-service:50051"
+  WORKER_CIRCUIT_BREAKER_MAX_FAILURES: "5"
+  WORKER_CIRCUIT_BREAKER_OPEN_DURATION: "30s"
+  WORKER_OUTBOX_INTERVAL: "2"
+  WORKER_OUTBOX_BATCH_SIZE: "100"
+  WORKER_OUTBOX_MAX_RETRIES: "5"
+  OTEL_ENABLED: "true"
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://jaeger-service:4318"
+
+---
+# 2. Service: Expose Notification API để các service khác gọi vào
+apiVersion: v1
+kind: Service
+metadata:
+  name: notification-service
+  namespace: microservices-platform
+spec:
+  type: ClusterIP
+  selector:
+    app: notification-api
+  ports:
+    - protocol: TCP
+      port: 8082
+      targetPort: 8082
+
+---
+# 3. Deployment A: Notification API (HTTP Server)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notification-api
+  namespace: microservices-platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: notification-api
+  template:
+    metadata:
+      labels:
+        app: notification-api
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8082"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: notification-api
+          image: notification-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8082
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "128Mi"
+              cpu: "200m"
+          envFrom:
+            - configMapRef:
+                name: notification-config
+            - secretRef:
+                name: notification-secret
+          env:
+            - name: APP_MODE
+              value: "api"
+          readinessProbe:
+            tcpSocket:
+              port: 8082
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            tcpSocket:
+              port: 8082
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            failureThreshold: 3
+
+
+---
+# 5. Deployment C: Worker gửi Email (consume từ RabbitMQ → SMTP)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notification-worker-email
+  namespace: microservices-platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: notification-worker-email
+  template:
+    metadata:
+      labels:
+        app: notification-worker-email
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: notification-worker-email
+          image: notification-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: metrics
+              containerPort: 9090
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "128Mi"
+              cpu: "200m"
+          envFrom:
+            - configMapRef:
+                name: notification-config
+            - secretRef:
+                name: notification-secret
+          env:
+            - name: APP_MODE
+              value: "worker-email"
+
+---
+# 6. Deployment D: Worker xử lý Webhook callbacks
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notification-worker-webhook
+  namespace: microservices-platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: notification-worker-webhook
+  template:
+    metadata:
+      labels:
+        app: notification-worker-webhook
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: notification-worker-webhook
+          image: notification-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: metrics
+              containerPort: 9090
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "128Mi"
+              cpu: "200m"
+          envFrom:
+            - configMapRef:
+                name: notification-config
+            - secretRef:
+                name: notification-secret
+          env:
+            - name: APP_MODE
+              value: "worker-webhook"
+
+---
+# Deployment: Outbox worker — polls outbox_events and publishes to RabbitMQ
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notification-worker-outbox
+  namespace: microservices-platform
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: notification-worker-outbox
+  template:
+    metadata:
+      labels:
+        app: notification-worker-outbox
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: notification-worker-outbox
+          image: notification-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: metrics
+              containerPort: 9090
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "128Mi"
+              cpu: "100m"
+          envFrom:
+            - configMapRef:
+                name: notification-config
+            - secretRef:
+                name: notification-secret
+          env:
+            - name: APP_MODE
+              value: "worker-outbox"
+
+---
+# 8. Deployment E: Worker xử lý Dead Letter Queue (DLQ)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notification-worker-dlq
+  namespace: microservices-platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: notification-worker-dlq
+  template:
+    metadata:
+      labels:
+        app: notification-worker-dlq
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: notification-worker-dlq
+          image: notification-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: metrics
+              containerPort: 9090
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "128Mi"
+              cpu: "200m"
+          envFrom:
+            - configMapRef:
+                name: notification-config
+            - secretRef:
+                name: notification-secret
+          env:
+            - name: APP_MODE
+              value: "worker-dlq"
+
+---
+# 9. Deployment F: Worker lên lịch thông báo (Scheduler)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notification-worker-scheduler
+  namespace: microservices-platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: notification-worker-scheduler
+  template:
+    metadata:
+      labels:
+        app: notification-worker-scheduler
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: notification-worker-scheduler
+          image: notification-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: metrics
+              containerPort: 9090
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "128Mi"
+              cpu: "100m"
+          envFrom:
+            - configMapRef:
+                name: notification-config
+            - secretRef:
+                name: notification-secret
+          env:
+            - name: APP_MODE
+              value: "worker-scheduler"
+
+---
+# 10. Deployment G: Worker xử lý chiến dịch (Campaign)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notification-worker-campaign
+  namespace: microservices-platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: notification-worker-campaign
+  template:
+    metadata:
+      labels:
+        app: notification-worker-campaign
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: notification-worker-campaign
+          image: notification-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: metrics
+              containerPort: 9090
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "128Mi"
+              cpu: "200m"
+          envFrom:
+            - configMapRef:
+                name: notification-config
+            - secretRef:
+                name: notification-secret
+          env:
+            - name: APP_MODE
+              value: "worker-campaign"

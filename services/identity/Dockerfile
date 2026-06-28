@@ -1,21 +1,24 @@
 # Stage 1: Build
-FROM golang:1.26-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 RUN apk add --no-cache git
 
 WORKDIR /app
 
-COPY go.work go.work.sum ./
-COPY pkg/ ./pkg/
-COPY services/identity/go.mod services/identity/go.sum ./services/identity/
-
-RUN go mod download
-
 RUN go install github.com/swaggo/swag/cmd/swag@latest
 
-COPY services/identity/migrations/ ./services/identity/migrations/
-COPY services/identity/internal/ ./services/identity/internal/
-COPY services/identity/cmd/ ./services/identity/cmd/
+COPY pkg/go.mod ./pkg/
+COPY services/identity/go.mod services/identity/go.sum ./services/identity/
+
+RUN go work init && \
+    go work use ./pkg ./services/identity
+
+RUN cd pkg && go mod download
+RUN cd services/identity && go mod download
+
+
+COPY pkg/ ./pkg/
+COPY services/identity/ ./services/identity/
 
 RUN cd services/identity && swag init -g cmd/main.go --parseDependency --parseInternal
 

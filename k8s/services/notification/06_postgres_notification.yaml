@@ -1,0 +1,86 @@
+---
+# 1. PersistentVolumeClaim: Lưu trữ data postgres notification kể cả khi pod restart
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-notification-pvc
+  namespace: microservices-platform
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+
+---
+# 2. Service: Expose port nội bộ cho notification-service kết nối
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-notification-service
+  namespace: microservices-platform
+spec:
+  selector:
+    app: postgres-notification
+  ports:
+    - protocol: TCP
+      port: 5432
+      targetPort: 5432
+
+---
+# 3. Deployment: PostgreSQL cho Notification Service
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres-notification
+  namespace: microservices-platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres-notification
+  template:
+    metadata:
+      labels:
+        app: postgres-notification
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:15-alpine
+          ports:
+            - containerPort: 5432
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "250m"
+          env:
+            - name: POSTGRES_USER
+              value: "user_admin"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: notification-secret
+                  key: DATABASE_PASSWORD
+            - name: POSTGRES_DB
+              value: "notification_db"
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - user_admin
+                - -d
+                - notification_db
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 5
+          volumeMounts:
+            - name: postgres-notification-storage
+              mountPath: /var/lib/postgresql/data
+      volumes:
+        - name: postgres-notification-storage
+          persistentVolumeClaim:
+            claimName: postgres-notification-pvc

@@ -25,9 +25,9 @@ func NewAuthHandler(svc service.AuthService) *AuthHandler {
 // @Accept json
 // @Produce json
 // @Param request body dto.RegisterRequest true "Register Request"
-// @Success 201 {object} object
-// @Failure 400 {object} object
-// @Failure 500 {object} object
+// @Success 201 {object} response.StandardResponse
+// @Failure 400 {object} response.StandardResponse
+// @Failure 500 {object} response.StandardResponse
 // @Router /auth/register [post]
 func (h *AuthHandler) Register(c *gin.Context) {
 	var input dto.RegisterRequest
@@ -51,9 +51,9 @@ func (h *AuthHandler) Register(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param request body dto.LoginRequest true "Login Request"
-// @Success 200 {object} object
-// @Failure 400 {object} object
-// @Failure 500 {object} object
+// @Success 200 {object} response.StandardResponse
+// @Failure 400 {object} response.StandardResponse
+// @Failure 500 {object} response.StandardResponse
 // @Router /auth/login [post]
 func (h *AuthHandler) Login(c *gin.Context) {
 	var input dto.LoginRequest
@@ -77,9 +77,9 @@ func (h *AuthHandler) Login(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param request body dto.RefreshTokenRequest true "Refresh Token Request"
-// @Success 200 {object} object
-// @Failure 400 {object} object
-// @Failure 500 {object} object
+// @Success 200 {object} response.StandardResponse
+// @Failure 400 {object} response.StandardResponse
+// @Failure 500 {object} response.StandardResponse
 // @Router /auth/refresh [post]
 func (h *AuthHandler) RefreshToken(c *gin.Context) {
 	var refreshTokenReq dto.RefreshTokenRequest
@@ -113,9 +113,9 @@ func (h *AuthHandler) GoogleLogin(c *gin.Context) {
 // @Tags auth
 // @Param code query string true "OAuth code"
 // @Param state query string true "OAuth state"
-// @Success 200 {object} object
-// @Failure 400 {object} object
-// @Failure 500 {object} object
+// @Success 200 {object} response.StandardResponse
+// @Failure 400 {object} response.StandardResponse
+// @Failure 500 {object} response.StandardResponse
 // @Router /auth/google/callback [get]
 func (h *AuthHandler) GoogleCallback(c *gin.Context) {
 	code := c.Query("code")
@@ -142,9 +142,9 @@ func (h *AuthHandler) GoogleCallback(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param request body dto.GetProfileRequest true "Get Profile Request"
-// @Success 200 {object} object
-// @Failure 400 {object} object
-// @Failure 401 {object} object
+// @Success 200 {object} response.StandardResponse
+// @Failure 400 {object} response.StandardResponse
+// @Failure 401 {object} response.StandardResponse
 // @Router /profile/ [get]
 // @Security ApiKeyAuth
 func (h *AuthHandler) GetProfile(c *gin.Context) {
@@ -168,9 +168,9 @@ func (h *AuthHandler) GetProfile(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param request body dto.LogoutRequest true "Logout Request"
-// @Success 200 {object} object
-// @Failure 400 {object} object
-// @Failure 500 {object} object
+// @Success 200 {object} response.StandardResponse
+// @Failure 400 {object} response.StandardResponse
+// @Failure 500 {object} response.StandardResponse
 // @Router /auth/logout [post]
 func (h *AuthHandler) Logout(c *gin.Context) {
 	var input dto.LogoutRequest

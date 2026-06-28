@@ -16,6 +16,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	identity_config "github.com/tojinguyen/identity/internal/config"
+	identitygrpc "github.com/tojinguyen/identity/internal/grpc"
 	"github.com/tojinguyen/identity/internal/handler"
 	"github.com/tojinguyen/identity/internal/repository"
 	"github.com/tojinguyen/identity/internal/route"
@@ -27,13 +28,13 @@ import (
 // @title           Identity Service API
 // @version         1.0
 // @description     This is the API documentation for the Identity Service.
-// @host            localhost:8080
+// @host            localhost
 // @BasePath        /api/v1
 // @securityDefinitions.apikey ApiKeyAuth
 // @in header
 // @name Authorization
 func main() {
-	logger.Init("identity-service")
+	logger.Init("identity-service", "dev")
 	log := logger.L()
 
 	cfg := &identity_config.Config{}
@@ -66,13 +67,25 @@ func main() {
 	authService := service.NewAuthService(userRepo, authenticator, cache, cfg.GoogleOAuth.ClientID, cfg.GoogleOAuth.ClientSecret, cfg.GoogleOAuth.RedirectURL)
 	authHandler := handler.NewAuthHandler(authService)
 
+	seedService := service.NewSeedService(userRepo)
+	seedHandler := handler.NewSeedHandler(seedService)
+
+	// Start gRPC server for inter-service streaming (e.g. campaign user stream).
+	grpcPort := cfg.GRPCPort
+	grpcServer := identitygrpc.NewServer(userRepo)
+	go func() {
+		if err := identitygrpc.ListenAndServe(grpcServer, grpcPort); err != nil {
+			log.Fatal("gRPC server failed", zap.Error(err))
+		}
+	}()
+
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
 
 	r.Use(gin.Recovery())
 	r.Use(logger.GinMiddleware())
 
-	route.RegisterRoutes(r, authHandler, authenticator)
+	route.RegisterRoutes(r, authHandler, seedHandler, authenticator)
 
 	srv := &http.Server{
 		Addr:    fmt.Sprintf(":%d", cfg.ServerPort),
@@ -89,6 +102,8 @@ func main() {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
+
+	grpcServer.GracefulStop()
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(cfg.TimeGrace)*time.Second)
 	defer cancel()

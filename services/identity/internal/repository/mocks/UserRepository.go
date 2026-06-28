@@ -14,6 +14,24 @@ type UserRepository struct {
 	mock.Mock
 }
 
+// BulkCreate provides a mock function with given fields: ctx, users, batchSize
+func (_m *UserRepository) BulkCreate(ctx context.Context, users []*domain.User, batchSize int) error {
+	ret := _m.Called(ctx, users, batchSize)
+
+	if len(ret) == 0 {
+		panic("no return value specified for BulkCreate")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, []*domain.User, int) error); ok {
+		r0 = rf(ctx, users, batchSize)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // Create provides a mock function with given fields: ctx, user
 func (_m *UserRepository) Create(ctx context.Context, user *domain.User) error {
 	ret := _m.Called(ctx, user)
@@ -126,6 +144,60 @@ func (_m *UserRepository) Update(ctx context.Context, user *domain.User) error {
 	}
 
 	return r0
+}
+
+// ListUsers provides a mock function with given fields: ctx, role, cursor, limit
+func (_m *UserRepository) ListUsers(ctx context.Context, role string, cursor string, limit int) ([]*domain.User, error) {
+	ret := _m.Called(ctx, role, cursor, limit)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ListUsers")
+	}
+
+	var r0 []*domain.User
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, int) ([]*domain.User, error)); ok {
+		return rf(ctx, role, cursor, limit)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, int) []*domain.User); ok {
+		r0 = rf(ctx, role, cursor, limit)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]*domain.User)
+		}
+	}
+	if rf, ok := ret.Get(1).(func(context.Context, string, string, int) error); ok {
+		r1 = rf(ctx, role, cursor, limit)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// CountUsers provides a mock function with given fields: ctx, role
+func (_m *UserRepository) CountUsers(ctx context.Context, role string) (int64, error) {
+	ret := _m.Called(ctx, role)
+
+	if len(ret) == 0 {
+		panic("no return value specified for CountUsers")
+	}
+
+	var r0 int64
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, string) (int64, error)); ok {
+		return rf(ctx, role)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, string) int64); ok {
+		r0 = rf(ctx, role)
+	} else {
+		r0 = ret.Get(0).(int64)
+	}
+	if rf, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = rf(ctx, role)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
 }
 
 // NewUserRepository creates a new instance of UserRepository. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.

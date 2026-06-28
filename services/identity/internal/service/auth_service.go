@@ -4,7 +4,6 @@ import (
 	"backend/pkg/auth"
 	"backend/pkg/errors"
 	"backend/pkg/logger"
-	"backend/pkg/redis"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -18,6 +17,12 @@ import (
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 )
+
+type Cache interface {
+	Set(ctx context.Context, key string, value interface{}, expiration time.Duration) error
+	Get(ctx context.Context, key string, dest interface{}) error
+	Delete(ctx context.Context, keys ...string) error
+}
 
 type AuthService interface {
 	Register(ctx context.Context, email, password, name string) (*dto.RegisterResponse, error)
@@ -34,10 +39,10 @@ type authService struct {
 	userRepo      repository.UserRepository
 	authenticator *auth.Authenticator
 	oauthConfig   *oauth2.Config
-	cache         *redis.Cache
+	cache         Cache
 }
 
-func NewAuthService(userRepo repository.UserRepository, authenticator *auth.Authenticator, cache *redis.Cache, googleClientID, googleSecret, redirectURL string) AuthService {
+func NewAuthService(userRepo repository.UserRepository, authenticator *auth.Authenticator, cache Cache, googleClientID, googleSecret, redirectURL string) AuthService {
 	conf := &oauth2.Config{
 		ClientID:     googleClientID,
 		ClientSecret: googleSecret,
@@ -72,6 +77,7 @@ func (s *authService) Register(ctx context.Context, email, password, name string
 }
 
 func (s *authService) Login(ctx context.Context, email, password string) (*dto.LoginResponse, error) {
+	logger.FromContext(ctx).Info("User login", zap.String("email", email))
 	user, err := s.userRepo.GetByEmail(ctx, email)
 	if err != nil {
 		return nil, err

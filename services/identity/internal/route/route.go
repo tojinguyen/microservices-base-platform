@@ -4,15 +4,20 @@ import (
 	"backend/pkg/auth"
 
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/tojinguyen/identity/internal/handler"
+	"github.com/tojinguyen/identity/internal/middleware"
 
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 	_ "github.com/tojinguyen/identity/docs"
 )
 
-func RegisterRoutes(r *gin.Engine, authHandler *handler.AuthHandler, authenticator *auth.Authenticator) {
-	// Swagger Route
+func RegisterRoutes(r *gin.Engine, authHandler *handler.AuthHandler, seedHandler *handler.SeedHandler, authenticator *auth.Authenticator) {
+	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
+
+	r.Use(middleware.PrometheusMiddleware())
+
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	v1 := r.Group("/api/v1/auth")
@@ -23,6 +28,11 @@ func RegisterRoutes(r *gin.Engine, authHandler *handler.AuthHandler, authenticat
 
 		v1.GET("/google/login", authHandler.GoogleLogin)
 		v1.GET("/google/callback", authHandler.GoogleCallback)
+	}
+
+	admin := r.Group("/api/v1/admin")
+	{
+		admin.POST("/seed/users", seedHandler.SeedUsers)
 	}
 
 	profile := r.Group("/api/v1/profile")

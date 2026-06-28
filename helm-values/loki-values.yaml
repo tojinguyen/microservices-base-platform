@@ -1,0 +1,80 @@
+grafana:
+  enabled: true
+  adminPassword: "admin123"
+  service:
+    type: ClusterIP
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    path: /grafana
+    hosts:
+      - localhost
+  grafana.ini:
+    server:
+      domain: localhost
+      root_url: "%(protocol)s://%(domain)s/grafana/"
+      serve_from_sub_path: true
+    date_formats:
+      default_timezone: Asia/Ho_Chi_Minh
+  # Grafana tự động load dashboard từ ConfigMap trong namespace monitoring
+  dashboardProviders:
+    dashboardproviders.yaml:
+      apiVersion: 1
+      providers:
+        - name: "microservices"
+          orgId: 1
+          folder: "Microservices"
+          type: file
+          disableDeletion: false
+          editable: true
+          options:
+            path: /var/lib/grafana/dashboards/microservices
+  dashboardsConfigMaps:
+    microservices: "grafana-logs-dashboard"
+  sidecar:
+    datasources:
+      label: grafana_datasource
+      labelValue: "1"
+
+promtail:
+  enabled: true
+  config:
+    snippets:
+      pipelineStages:
+        - cri: {}
+        - match:
+            # Chỉ xử lý các dòng log là JSON object (bắt đầu bằng '{')
+            selector: '{container!=""} |~ "^\\{"'
+            stages:
+              # Bước 1: Parse JSON để lấy các field cần thiết
+              - json:
+                  expressions:
+                    level: level
+                    service: service
+                    msg: msg
+                    time: time
+                    trace_id: trace_id
+              # Bước 2: Set Loki labels từ các field đã parse
+              # 'level' label cho phép Grafana tô màu log theo severity
+              - labels:
+                  level:
+                  service:
+              # Bước 3: Parse timestamp từ field 'time' trong JSON
+              # để Grafana hiển thị đúng thời gian của log entry
+              - timestamp:
+                  source: time
+                  format: RFC3339Nano
+                  fallback_formats:
+                    - RFC3339
+                    - "2006-01-02T15:04:05.000Z07:00"
+              # NOTE: KHÔNG dùng output stage ở đây.
+              # Nếu dùng `output: source: msg`, Promtail sẽ thay log body bằng
+              # chỉ mình trường msg → mất toàn bộ JSON fields (email, trace_id,
+              # latency_ms, status...). Grafana cần giữ nguyên full JSON body
+              # để query `| json` có thể extract và hiển thị tất cả fields.
+
+loki:
+  isDefault: true
+  persistence:
+    enabled: true
+    size: 5Gi
