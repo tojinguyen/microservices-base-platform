@@ -4,6 +4,5 @@ use (
 	./pkg
 	./services/identity
 	./services/notification
-	./services/transcoder
 	./services/upload
 )

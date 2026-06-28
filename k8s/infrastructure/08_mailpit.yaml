@@ -70,3 +70,9 @@ spec:
               port: 1025
             initialDelaySeconds: 5
             periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: 1025
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            failureThreshold: 3

@@ -72,6 +72,10 @@ spec:
     metadata:
       labels:
         app: notification-api
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8082"
+        prometheus.io/path: "/metrics"
     spec:
       containers:
         - name: notification-api
@@ -124,11 +128,18 @@ spec:
     metadata:
       labels:
         app: notification-worker-email
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
     spec:
       containers:
         - name: notification-worker-email
           image: notification-service:latest
           imagePullPolicy: IfNotPresent
+          ports:
+            - name: metrics
+              containerPort: 9090
           resources:
             requests:
               memory: "64Mi"
@@ -161,11 +172,18 @@ spec:
     metadata:
       labels:
         app: notification-worker-webhook
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
     spec:
       containers:
         - name: notification-worker-webhook
           image: notification-service:latest
           imagePullPolicy: IfNotPresent
+          ports:
+            - name: metrics
+              containerPort: 9090
           resources:
             requests:
               memory: "64Mi"
@@ -198,11 +216,18 @@ spec:
     metadata:
       labels:
         app: notification-worker-outbox
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
     spec:
       containers:
         - name: notification-worker-outbox
           image: notification-service:latest
           imagePullPolicy: IfNotPresent
+          ports:
+            - name: metrics
+              containerPort: 9090
           resources:
             requests:
               memory: "64Mi"
@@ -235,11 +260,18 @@ spec:
     metadata:
       labels:
         app: notification-worker-dlq
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
     spec:
       containers:
         - name: notification-worker-dlq
           image: notification-service:latest
           imagePullPolicy: IfNotPresent
+          ports:
+            - name: metrics
+              containerPort: 9090
           resources:
             requests:
               memory: "64Mi"
@@ -272,11 +304,18 @@ spec:
     metadata:
       labels:
         app: notification-worker-scheduler
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
     spec:
       containers:
         - name: notification-worker-scheduler
           image: notification-service:latest
           imagePullPolicy: IfNotPresent
+          ports:
+            - name: metrics
+              containerPort: 9090
           resources:
             requests:
               memory: "64Mi"
@@ -309,11 +348,18 @@ spec:
     metadata:
       labels:
         app: notification-worker-campaign
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
     spec:
       containers:
         - name: notification-worker-campaign
           image: notification-service:latest
           imagePullPolicy: IfNotPresent
+          ports:
+            - name: metrics
+              containerPort: 9090
           resources:
             requests:
               memory: "64Mi"
