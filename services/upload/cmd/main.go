@@ -105,16 +105,19 @@ func runAPI(ctx context.Context, cfg *uploadConfig.Config, database *gorm.DB) {
 	})
 
 	videoRepo := repository.NewVideoRepository(database)
+	sessionRepo := repository.NewUploadSessionRepository(database)
 	eventPub := publisher.NewEventPublisher(brokerClient)
 	videoSvc := service.NewVideoService(videoRepo, store, eventPub, cfg)
+	sessionSvc := service.NewUploadSessionService(sessionRepo, videoRepo, store, eventPub, cfg)
 	videoHandler := handler.NewVideoHandler(videoSvc)
+	sessionHandler := handler.NewUploadSessionHandler(sessionSvc)
 
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
 	r.Use(gin.Recovery())
 	r.Use(logger.GinMiddleware())
 	r.Use(trace.TracerMiddleware("upload-service"))
-	route.RegisterRoutes(r, videoHandler, limiter, cfg.RateLimit)
+	route.RegisterRoutes(r, videoHandler, sessionHandler, limiter, cfg.RateLimit)
 
 	srv := &http.Server{
 		Addr:    fmt.Sprintf(":%d", cfg.ServerPort),
@@ -153,8 +156,9 @@ func runJanitorWorker(ctx context.Context, cfg *uploadConfig.Config, database *g
 	}
 
 	videoRepo := repository.NewVideoRepository(database)
+	sessionRepo := repository.NewUploadSessionRepository(database)
 	eventPub := publisher.NewEventPublisher(brokerClient)
-	janitor := worker.NewJanitorWorker(videoRepo, store, eventPub, cfg)
+	janitor := worker.NewJanitorWorker(videoRepo, sessionRepo, store, eventPub, cfg)
 
 	log.Info("Janitor worker starting")
 	janitor.Start(ctx)

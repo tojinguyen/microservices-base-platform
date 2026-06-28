@@ -59,3 +59,72 @@ type ListVideosResponse struct {
 	Page     int             `json:"page"`
 	PageSize int             `json:"page_size"`
 }
+
+// ── Chunked upload DTOs ────────────────────────────────────────────────────
+
+type InitChunkedUploadRequest struct {
+	VideoID   string `json:"video_id" binding:"required,uuid"`
+	MimeType  string `json:"mime_type" binding:"required"`
+	SizeBytes int64  `json:"size_bytes" binding:"required,min=1"`
+}
+
+type InitChunkedUploadResponse struct {
+	SessionID   string    `json:"session_id"`
+	VideoID     string    `json:"video_id"`
+	TotalParts  int       `json:"total_parts"`
+	PartSize    int64     `json:"part_size_bytes"`
+	TotalSize   int64     `json:"total_size_bytes"`
+	Status      string    `json:"status"`
+	ExpiresAt   time.Time `json:"expires_at"`
+}
+
+type PartStateResponse struct {
+	PartNumber int    `json:"part_number"`
+	Status     string `json:"status"`
+	Etag       string `json:"etag,omitempty"`
+}
+
+type GetSessionResponse struct {
+	SessionID      string              `json:"session_id"`
+	VideoID        string              `json:"video_id"`
+	TotalParts     int                 `json:"total_parts"`
+	PartSizeBytes  int64               `json:"part_size_bytes"`
+	TotalSizeBytes int64               `json:"total_size_bytes"`
+	Status         string              `json:"status"`
+	ExpiresAt      time.Time           `json:"expires_at"`
+	Parts          []PartStateResponse `json:"parts"`
+}
+
+type GetPartURLResponse struct {
+	SessionID  string    `json:"session_id"`
+	PartNumber int       `json:"part_number"`
+	UploadURL  string    `json:"upload_url"`
+	Method     string    `json:"method"`
+	ExpiresAt  time.Time `json:"expires_at"`
+}
+
+type ConfirmPartRequest struct {
+	Etag string `json:"etag" binding:"required"`
+}
+
+type ConfirmPartResponse struct {
+	SessionID     string `json:"session_id"`
+	PartNumber    int    `json:"part_number"`
+	Status        string `json:"status"`
+	UploadedParts int    `json:"uploaded_parts"`
+	TotalParts    int    `json:"total_parts"`
+}
+
+type CompleteChunkedUploadResponse struct {
+	SessionID  string     `json:"session_id"`
+	VideoID    string     `json:"video_id"`
+	Status     string     `json:"status"`
+	Etag       string     `json:"etag,omitempty"`
+	SizeBytes  *int64     `json:"size_bytes,omitempty"`
+	UploadedAt *time.Time `json:"uploaded_at,omitempty"`
+}
+
+type AbortSessionResponse struct {
+	SessionID string `json:"session_id"`
+	Status    string `json:"status"`
+}

@@ -10,6 +10,7 @@ import (
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	uploadConfig "github.com/tojinguyen/upload/internal/config"
 )
 
@@ -114,4 +115,108 @@ func (s *S3Storage) DeleteObject(ctx context.Context, key string) error {
 
 func (s *S3Storage) PublicURL(key string) string {
 	return fmt.Sprintf("%s/%s", s.publicURL, key)
+}
+
+func (s *S3Storage) CreateMultipartUpload(ctx context.Context, objectKey, mimeType string) (string, error) {
+	out, err := s.client.CreateMultipartUpload(ctx, &s3.CreateMultipartUploadInput{
+		Bucket:      aws.String(s.bucket),
+		Key:         aws.String(objectKey),
+		ContentType: aws.String(mimeType),
+	})
+	if err != nil {
+		return "", fmt.Errorf("create multipart upload failed: %w", err)
+	}
+	return aws.ToString(out.UploadId), nil
+}
+
+func (s *S3Storage) GeneratePresignedPartURL(ctx context.Context, objectKey, uploadID string, partNumber int32, ttl time.Duration) (string, time.Time, error) {
+	req, err := s.presigner.PresignUploadPart(ctx, &s3.UploadPartInput{
+		Bucket:     aws.String(s.bucket),
+		Key:        aws.String(objectKey),
+		UploadId:   aws.String(uploadID),
+		PartNumber: aws.Int32(partNumber),
+	}, s3.WithPresignExpires(ttl))
+	if err != nil {
+		return "", time.Time{}, fmt.Errorf("presign part upload failed: %w", err)
+	}
+	return req.URL, time.Now().Add(ttl), nil
+}
+
+func (s *S3Storage) CompleteMultipartUpload(ctx context.Context, objectKey, uploadID string, parts []CompletedPart) (string, error) {
+	completed := make([]types.CompletedPart, len(parts))
+	for i, p := range parts {
+		etag := p.ETag
+		if !strings.HasPrefix(etag, `"`) {
+			etag = `"` + etag + `"`
+		}
+		completed[i] = types.CompletedPart{
+			PartNumber: aws.Int32(p.PartNumber),
+			ETag:       aws.String(etag),
+		}
+	}
+
+	out, err := s.client.CompleteMultipartUpload(ctx, &s3.CompleteMultipartUploadInput{
+		Bucket:   aws.String(s.bucket),
+		Key:      aws.String(objectKey),
+		UploadId: aws.String(uploadID),
+		MultipartUpload: &types.CompletedMultipartUpload{
+			Parts: completed,
+		},
+	})
+	if err != nil {
+		return "", fmt.Errorf("complete multipart upload failed: %w", err)
+	}
+	etag := strings.Trim(aws.ToString(out.ETag), `"`)
+	return etag, nil
+}
+
+func (s *S3Storage) AbortMultipartUpload(ctx context.Context, objectKey, uploadID string) error {
+	_, err := s.client.AbortMultipartUpload(ctx, &s3.AbortMultipartUploadInput{
+		Bucket:   aws.String(s.bucket),
+		Key:      aws.String(objectKey),
+		UploadId: aws.String(uploadID),
+	})
+	if err != nil {
+		errStr := err.Error()
+		if strings.Contains(errStr, "404") || strings.Contains(errStr, "NoSuchUpload") || strings.Contains(errStr, "NotFound") {
+			return nil
+		}
+		return fmt.Errorf("abort multipart upload failed: %w", err)
+	}
+	return nil
+}
+
+func (s *S3Storage) ListMultipartParts(ctx context.Context, objectKey, uploadID string) ([]PartInfo, error) {
+	var result []PartInfo
+	var partNumberMarker *string
+
+	for {
+		input := &s3.ListPartsInput{
+			Bucket:           aws.String(s.bucket),
+			Key:              aws.String(objectKey),
+			UploadId:         aws.String(uploadID),
+			PartNumberMarker: partNumberMarker,
+		}
+
+		out, err := s.client.ListParts(ctx, input)
+		if err != nil {
+			return nil, fmt.Errorf("list parts failed: %w", err)
+		}
+
+		for _, p := range out.Parts {
+			result = append(result, PartInfo{
+				PartNumber:   aws.ToInt32(p.PartNumber),
+				ETag:         strings.Trim(aws.ToString(p.ETag), `"`),
+				SizeBytes:    aws.ToInt64(p.Size),
+				LastModified: aws.ToTime(p.LastModified),
+			})
+		}
+
+		if !aws.ToBool(out.IsTruncated) {
+			break
+		}
+		partNumberMarker = out.NextPartNumberMarker
+	}
+
+	return result, nil
 }

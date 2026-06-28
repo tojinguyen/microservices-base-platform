@@ -36,9 +36,12 @@ type StorageConfig struct {
 }
 
 type UploadConfig struct {
-	MaxSizeBytes      int64  `mapstructure:"max_size_bytes"`
-	PresignTTLSeconds int    `mapstructure:"presign_ttl_seconds"`
-	AllowedMimeTypes  string `mapstructure:"allowed_mime_types"`
+	MaxSizeBytes          int64  `mapstructure:"max_size_bytes"`
+	PresignTTLSeconds     int    `mapstructure:"presign_ttl_seconds"`
+	AllowedMimeTypes      string `mapstructure:"allowed_mime_types"`
+	ChunkSizeMB           int    `mapstructure:"chunk_size_mb"`
+	PartPresignTTLSeconds int    `mapstructure:"part_presign_ttl_seconds"`
+	SessionTTLHours       int    `mapstructure:"session_ttl_hours"`
 }
 
 type JanitorConfig struct {

@@ -16,23 +16,26 @@ import (
 )
 
 type JanitorWorker struct {
-	repo      repository.VideoRepository
-	storage   storage.ObjectStorage
-	publisher *publisher.EventPublisher
-	cfg       *config.Config
+	repo        repository.VideoRepository
+	sessionRepo repository.UploadSessionRepository
+	storage     storage.ObjectStorage
+	publisher   *publisher.EventPublisher
+	cfg         *config.Config
 }
 
 func NewJanitorWorker(
 	repo repository.VideoRepository,
+	sessionRepo repository.UploadSessionRepository,
 	store storage.ObjectStorage,
 	pub *publisher.EventPublisher,
 	cfg *config.Config,
 ) *JanitorWorker {
 	return &JanitorWorker{
-		repo:      repo,
-		storage:   store,
-		publisher: pub,
-		cfg:       cfg,
+		repo:        repo,
+		sessionRepo: sessionRepo,
+		storage:     store,
+		publisher:   pub,
+		cfg:         cfg,
 	}
 }
 
@@ -51,6 +54,7 @@ func (w *JanitorWorker) Start(ctx context.Context) {
 			return
 		case <-ticker.C:
 			w.runBatch(ctx)
+			w.runSessionBatch(ctx)
 		}
 	}
 }
@@ -72,6 +76,41 @@ func (w *JanitorWorker) runBatch(ctx context.Context) {
 
 	for i := range videos {
 		w.processVideo(ctx, &videos[i])
+	}
+}
+
+func (w *JanitorWorker) runSessionBatch(ctx context.Context) {
+	log := logger.L()
+
+	sessions, err := w.sessionRepo.ListExpiredActiveSessions(ctx, time.Now(), w.cfg.Janitor.BatchSize)
+	if err != nil {
+		log.Error("janitor: failed to query expired upload sessions", zap.Error(err))
+		return
+	}
+
+	if len(sessions) == 0 {
+		return
+	}
+
+	log.Info("janitor: expiring stale upload sessions", zap.Int("count", len(sessions)))
+
+	for i := range sessions {
+		s := &sessions[i]
+		if err := w.storage.AbortMultipartUpload(ctx, s.ObjectKey, s.S3UploadID); err != nil {
+			log.Warn("janitor: failed to abort S3 multipart upload",
+				zap.Error(err),
+				zap.String("session_id", s.ID.String()),
+			)
+		}
+		s.Status = domain.SessionStatusExpired
+		if err := w.sessionRepo.UpdateSession(ctx, s); err != nil {
+			log.Error("janitor: failed to mark session as expired",
+				zap.Error(err),
+				zap.String("session_id", s.ID.String()),
+			)
+		} else {
+			log.Info("janitor: marked upload session as expired", zap.String("session_id", s.ID.String()))
+		}
 	}
 }
 
